@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BrainDatabase } from "../src/core/db";
-import { searchFTS } from "../src/core/fts";
+import { normalizeFtsQuery, searchFTS } from "../src/core/fts";
 
 const cleanup: string[] = [];
 
@@ -61,6 +61,84 @@ describe("searchFTS", () => {
       expect(results[0]?.slug).toBe("companies/river-ai");
       expect(results[0]?.score).toBeGreaterThan(0);
       expect(results[0]?.excerpt).toContain("[agent]");
+    } finally {
+      brain.close();
+    }
+  });
+
+  it("normalizes punctuation-heavy free text before querying FTS", () => {
+    const dir = createTempDir("gbrain-fts-normalized-");
+    const brain = new BrainDatabase(join(dir, "brain.db"));
+
+    try {
+      brain.initialize();
+      brain.upsertPage({
+        slug: "concepts/foo-bar",
+        type: "concept",
+        title: "Foo Bar",
+        compiledTruth: "C guide for foo bar and baz workflows.",
+        timeline: "",
+        frontmatter: JSON.stringify({ title: "Foo Bar", type: "concept" }),
+      });
+
+      expect(normalizeFtsQuery('C++ foo-bar foo/bar "baz')).toBe(
+        '"C" AND "foo" AND "bar" AND "foo" AND "bar" AND "baz"',
+      );
+      expect(() => searchFTS(brain.db, "C++")).not.toThrow();
+      expect(() => searchFTS(brain.db, "foo-bar")).not.toThrow();
+      expect(() => searchFTS(brain.db, "foo/bar")).not.toThrow();
+      expect(() => searchFTS(brain.db, '"baz')).not.toThrow();
+
+      expect(searchFTS(brain.db, "foo-bar")[0]?.slug).toBe("concepts/foo-bar");
+      expect(searchFTS(brain.db, "foo/bar")[0]?.slug).toBe("concepts/foo-bar");
+    } finally {
+      brain.close();
+    }
+  });
+
+  it("uses title excerpts for title-only matches", () => {
+    const dir = createTempDir("gbrain-fts-title-");
+    const brain = new BrainDatabase(join(dir, "brain.db"));
+
+    try {
+      brain.initialize();
+      brain.upsertPage({
+        slug: "companies/river-ai",
+        type: "company",
+        title: "River AI",
+        compiledTruth: "General company description without the title term.",
+        timeline: "",
+        frontmatter: JSON.stringify({ title: "River AI", type: "company" }),
+      });
+
+      const results = searchFTS(brain.db, "river");
+
+      expect(results[0]?.slug).toBe("companies/river-ai");
+      expect(results[0]?.excerpt).toContain("[River]");
+    } finally {
+      brain.close();
+    }
+  });
+
+  it("uses timeline excerpts for timeline-only matches", () => {
+    const dir = createTempDir("gbrain-fts-timeline-");
+    const brain = new BrainDatabase(join(dir, "brain.db"));
+
+    try {
+      brain.initialize();
+      brain.upsertPage({
+        slug: "people/ali-partovi",
+        type: "person",
+        title: "Ali Partovi",
+        compiledTruth: "Overview without the event keyword.",
+        timeline: "- **2026-04-05** | meeting - Discussed moonshot pipeline.",
+        frontmatter: JSON.stringify({ title: "Ali Partovi", type: "person" }),
+      });
+
+      const results = searchFTS(brain.db, "moonshot");
+
+      expect(results[0]?.slug).toBe("people/ali-partovi");
+      expect(results[0]?.excerpt).toContain("[moonshot]");
     } finally {
       brain.close();
     }
