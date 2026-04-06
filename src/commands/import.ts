@@ -124,39 +124,40 @@ export async function runImport(
     brain.initialize();
 
     const files = scanMarkdownFiles(sourceDir);
-    const pendingLinks: Array<{ fromSlug: string; toSlug: string; context: string }> = [];
+    const importedPages = files.map((filePath) => ({
+      filePath,
+      slug: normalizeWikiTarget(relative(sourceDir, filePath).replace(/\\/g, "/")),
+    }));
+    const linksBySlug = new Map<string, Array<{ targetSlug: string; context: string }>>();
 
     brain.transaction(() => {
-      for (const filePath of files) {
-        const relativePath = relative(sourceDir, filePath).replace(/\\/g, "/");
-        const slug = normalizeWikiTarget(relativePath);
-        const parsed = parseMarkdownDocument(readFileSync(filePath, "utf8"));
+      brain.deletePagesNotIn(importedPages.map((page) => page.slug));
+
+      for (const importedPage of importedPages) {
+        const parsed = parseMarkdownDocument(readFileSync(importedPage.filePath, "utf8"));
 
         brain.upsertPage({
-          slug,
-          type: extractPageType(slug, parsed.frontmatter.type),
-          title: extractTitle(slug, parsed.frontmatter.title),
+          slug: importedPage.slug,
+          type: extractPageType(importedPage.slug, parsed.frontmatter.type),
+          title: extractTitle(importedPage.slug, parsed.frontmatter.title),
           compiledTruth: parsed.compiledTruth,
           timeline: parsed.timeline,
           frontmatter: JSON.stringify(parsed.frontmatter),
         });
 
-        brain.replaceTags(slug, extractTags(parsed.frontmatter.tags));
-        brain.replaceRawData(slug, readSidecarSources(sourceDir, filePath));
-
-        for (const link of extractWikiLinks(`${parsed.compiledTruth}\n${parsed.timeline}`)) {
-          pendingLinks.push({
-            fromSlug: slug,
-            toSlug: link.targetSlug,
+        brain.replaceTags(importedPage.slug, extractTags(parsed.frontmatter.tags));
+        brain.replaceRawData(importedPage.slug, readSidecarSources(sourceDir, importedPage.filePath));
+        linksBySlug.set(
+          importedPage.slug,
+          extractWikiLinks(`${parsed.compiledTruth}\n${parsed.timeline}`).map((link) => ({
+            targetSlug: link.targetSlug,
             context: link.context,
-          });
-        }
+          })),
+        );
       }
 
-      for (const link of pendingLinks) {
-        if (brain.getPageBySlug(link.toSlug)) {
-          brain.linkPages(link.fromSlug, link.toSlug, link.context);
-        }
+      for (const importedPage of importedPages) {
+        brain.replaceOutgoingLinks(importedPage.slug, linksBySlug.get(importedPage.slug) ?? []);
       }
     });
 

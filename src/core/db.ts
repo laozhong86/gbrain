@@ -300,6 +300,16 @@ export class BrainDatabase {
     return row ? mapPageRow(row) : null;
   }
 
+  deletePagesNotIn(slugs: string[]): void {
+    if (slugs.length === 0) {
+      this.db.query("DELETE FROM pages").run();
+      return;
+    }
+
+    const placeholders = slugs.map((_, index) => `?${index + 1}`).join(", ");
+    this.db.query(`DELETE FROM pages WHERE slug NOT IN (${placeholders})`).run(...slugs);
+  }
+
   replaceRawData(slug: string, records: RawDataRecord[]): void {
     const page = this.getPageBySlug(slug);
 
