@@ -1,5 +1,4 @@
 import { Database } from "bun:sqlite";
-import { readFileSync } from "node:fs";
 import {
   cosineSimilarity,
   decodeEmbedding,
@@ -9,8 +8,8 @@ import {
 } from "./embeddings";
 import type { ListPagesOptions, PageRecord, PageUpsertInput } from "./types";
 import { PAGE_TYPE_SQL_LIST } from "./types";
-
-const schemaSql = readFileSync(new URL("../schema.sql", import.meta.url), "utf8");
+// @ts-expect-error Bun bundles .sql text imports for the compiled binary.
+import schemaSql from "../schema.sql" with { type: "text" };
 const createPagesTableSql = `
 CREATE TABLE pages (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

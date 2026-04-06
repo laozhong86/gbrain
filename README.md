@@ -1,13 +1,26 @@
 # GBrain
 
-GBrain is a Bun-based CLI and MCP server for managing a markdown-backed knowledge graph on SQLite.
+SQLite-backed personal knowledge brain with FTS5, embeddings, CLI access, and MCP access.
 
-This repository is only bootstrapped for now. The CLI entrypoint and build output are added in later tasks.
+## Quick start
+
+```bash
+bun install
+bun run build
+./bin/gbrain init
+./bin/gbrain stats
+```
 
 ## Development
 
-Install dependencies with `bun install`.
+Run `bun test`, `bun run check`, and `bun run build` before finishing work.
 
-Run the smoke test with `bun test test/smoke.test.ts`.
+## Skills
 
-Run type checking with `bun run check`.
+Shipped workflow guides live under `skills/`:
+
+- `skills/ingest`
+- `skills/query`
+- `skills/maintain`
+- `skills/enrich`
+- `skills/briefing`
