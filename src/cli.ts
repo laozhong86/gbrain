@@ -1,3 +1,4 @@
+import { runCall } from "./commands/call";
 import { runEmbed } from "./commands/embed";
 import { runExport } from "./commands/export";
 import { runIngest } from "./commands/ingest";
@@ -9,6 +10,7 @@ import { runList } from "./commands/list";
 import { runPut } from "./commands/put";
 import { runQuery } from "./commands/query";
 import { runSearch } from "./commands/search";
+import { runServe } from "./commands/serve";
 import { runStats } from "./commands/stats";
 import { runTag, runTags, runUntag } from "./commands/tags";
 import { runTimelineAdd, runTimelineList } from "./commands/timeline";
@@ -58,7 +60,7 @@ function consumeOption(argv: string[], flag: string): { args: string[]; value?: 
   return { args, value };
 }
 
-async function run(argv: string[]): Promise<string> {
+async function run(argv: string[]): Promise<string | undefined> {
   const db = consumeDbFlag(argv);
   const tag = consumeOption(db.args, "--tag");
   const [command, ...rest] = tag.args;
@@ -115,6 +117,15 @@ async function run(argv: string[]): Promise<string> {
         rest.join(" "),
         createOpenAIEmbeddingProvider(process.env.OPENAI_API_KEY ?? ""),
       );
+    case "serve":
+      await runServe(db.dbPath);
+      return undefined;
+    case "call":
+      return runCall(
+        db.dbPath,
+        requireArg(rest[0], "tool"),
+        requireArg(rest[1], "payload"),
+      );
     case "timeline":
       return runTimelineList(db.dbPath, requireArg(rest[0], "slug"));
     case "timeline-add":
@@ -135,7 +146,11 @@ async function run(argv: string[]): Promise<string> {
 
 async function main(): Promise<void> {
   try {
-    console.log(await run(Bun.argv.slice(2)));
+    const output = await run(Bun.argv.slice(2));
+
+    if (output !== undefined) {
+      console.log(output);
+    }
   } catch (error) {
     process.exitCode = 1;
     const message = error instanceof Error ? error.message : String(error);
