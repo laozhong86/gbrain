@@ -3,6 +3,7 @@ import { runGet } from "./commands/get";
 import { runInit } from "./commands/init";
 import { runList } from "./commands/list";
 import { runPut } from "./commands/put";
+import { runSearch } from "./commands/search";
 import { runStats } from "./commands/stats";
 import { runTag, runTags, runUntag } from "./commands/tags";
 
@@ -83,6 +84,9 @@ function run(argv: string[]): string {
       return runUntag(db.dbPath, requireArg(rest[0], "slug"), requireArg(rest[1], "tag"));
     case "stats":
       return runStats(db.dbPath);
+    case "search":
+      requireArg(rest[0], "query");
+      return runSearch(db.dbPath, rest.join(" "));
     default:
       throw new Error(`Unknown command: ${command ?? ""}`.trim());
   }
