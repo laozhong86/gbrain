@@ -1,8 +1,10 @@
+import { runBacklinks, runLink, runUnlink } from "./commands/link";
 import { runGet } from "./commands/get";
 import { runInit } from "./commands/init";
 import { runList } from "./commands/list";
 import { runPut } from "./commands/put";
 import { runStats } from "./commands/stats";
+import { runTag, runTags, runUntag } from "./commands/tags";
 
 function consumeDbFlag(argv: string[]): { args: string[]; dbPath: string } {
   const args = [...argv];
@@ -62,6 +64,23 @@ function run(argv: string[]): string {
       return runPut(db.dbPath, requireArg(rest[0], "slug"), requireArg(rest[1], "file"));
     case "list":
       return runList(db.dbPath, tag.value);
+    case "link":
+      return runLink(
+        db.dbPath,
+        requireArg(rest[0], "from"),
+        requireArg(rest[1], "to"),
+        rest[2] ?? "",
+      );
+    case "unlink":
+      return runUnlink(db.dbPath, requireArg(rest[0], "from"), requireArg(rest[1], "to"));
+    case "backlinks":
+      return runBacklinks(db.dbPath, requireArg(rest[0], "slug"));
+    case "tags":
+      return runTags(db.dbPath, requireArg(rest[0], "slug"));
+    case "tag":
+      return runTag(db.dbPath, requireArg(rest[0], "slug"), requireArg(rest[1], "tag"));
+    case "untag":
+      return runUntag(db.dbPath, requireArg(rest[0], "slug"), requireArg(rest[1], "tag"));
     case "stats":
       return runStats(db.dbPath);
     default:

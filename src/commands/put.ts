@@ -54,7 +54,7 @@ export function runPutFromSource(dbPath: string, slug: string, source: string): 
       timeline: parsed.timeline,
       frontmatter: JSON.stringify(parsed.frontmatter),
     });
-    brain.replacePageTags(slug, tags);
+    brain.replaceTags(slug, tags);
 
     return `Saved ${slug}`;
   } finally {

@@ -115,6 +115,76 @@ export class BrainDatabase {
     })();
   }
 
+  tagsForPage(slug: string): string[] {
+    const page = this.db.query<PageIdRow, [string]>("SELECT id FROM pages WHERE slug = ?1").get(slug);
+
+    if (!page) {
+      return [];
+    }
+
+    return this.db
+      .query<{ tag: string }, [number]>("SELECT tag FROM tags WHERE page_id = ?1 ORDER BY tag")
+      .all(page.id)
+      .map((row) => row.tag);
+  }
+
+  replaceTags(slug: string, tags: string[]): void {
+    this.replacePageTags(slug, tags);
+  }
+
+  linkPages(fromSlug: string, toSlug: string, context = ""): void {
+    const fromPage = this.db
+      .query<PageIdRow, [string]>("SELECT id FROM pages WHERE slug = ?1")
+      .get(fromSlug);
+    const toPage = this.db.query<PageIdRow, [string]>("SELECT id FROM pages WHERE slug = ?1").get(toSlug);
+
+    if (!fromPage || !toPage) {
+      throw new Error("Both pages must exist before linking");
+    }
+
+    this.db
+      .query(
+        `INSERT INTO links (from_page_id, to_page_id, context)
+         VALUES (?1, ?2, ?3)
+         ON CONFLICT(from_page_id, to_page_id) DO UPDATE SET context = excluded.context`,
+      )
+      .run(fromPage.id, toPage.id, context);
+  }
+
+  unlinkPages(fromSlug: string, toSlug: string): void {
+    const fromPage = this.db
+      .query<PageIdRow, [string]>("SELECT id FROM pages WHERE slug = ?1")
+      .get(fromSlug);
+    const toPage = this.db.query<PageIdRow, [string]>("SELECT id FROM pages WHERE slug = ?1").get(toSlug);
+
+    if (!fromPage || !toPage) {
+      return;
+    }
+
+    this.db
+      .query("DELETE FROM links WHERE from_page_id = ?1 AND to_page_id = ?2")
+      .run(fromPage.id, toPage.id);
+  }
+
+  backlinks(slug: string): string[] {
+    const page = this.db.query<PageIdRow, [string]>("SELECT id FROM pages WHERE slug = ?1").get(slug);
+
+    if (!page) {
+      return [];
+    }
+
+    return this.db
+      .query<{ slug: string }, [number]>(
+        `SELECT pages.slug
+         FROM links
+         INNER JOIN pages ON pages.id = links.from_page_id
+         WHERE links.to_page_id = ?1
+         ORDER BY pages.slug`,
+      )
+      .all(page.id)
+      .map((row) => row.slug);
+  }
+
   getPageBySlug(slug: string): PageRecord | null {
     const row = this.db
       .query<PageRow, [string]>(
