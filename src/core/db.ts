@@ -26,15 +26,18 @@ export class BrainDatabase {
   initialize(): void {
     this.db.exec("PRAGMA journal_mode = WAL;");
     this.db.exec("PRAGMA foreign_keys = ON;");
-    this.upgradeLegacyPagesSchema();
+    const didUpgradeLegacyPages = this.upgradeLegacyPagesSchema();
     this.db.exec(schemaSql);
+    if (didUpgradeLegacyPages) {
+      this.db.exec("INSERT INTO page_fts(page_fts) VALUES ('rebuild');");
+    }
   }
 
   close(): void {
     this.db.close();
   }
 
-  private upgradeLegacyPagesSchema(): void {
+  private upgradeLegacyPagesSchema(): boolean {
     const pagesTable = this.db
       .query<{ sql: string | null }, []>(
         "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'pages'",
@@ -42,7 +45,7 @@ export class BrainDatabase {
       .get();
 
     if (!pagesTable?.sql || pagesTable.sql.includes("CHECK")) {
-      return;
+      return false;
     }
 
     const invalidRows = this.db
@@ -75,6 +78,7 @@ export class BrainDatabase {
       `);
       this.db.exec("DROP TABLE pages_legacy;");
       this.db.exec("COMMIT;");
+      return true;
     } catch (error) {
       this.db.exec("ROLLBACK;");
       throw error;

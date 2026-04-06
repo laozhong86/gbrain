@@ -23,7 +23,7 @@ function createDatabase(): BrainDatabase {
   return brain;
 }
 
-function createLegacyDatabase(): BrainDatabase {
+function createLegacyDatabase(withPageData = false): BrainDatabase {
   const dir = mkdtempSync(join(tmpdir(), "gbrain-legacy-db-"));
   cleanup.push(dir);
   const dbPath = join(dir, "brain.db");
@@ -42,6 +42,14 @@ function createLegacyDatabase(): BrainDatabase {
       updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
     );
   `);
+
+  if (withPageData) {
+    legacy
+      .query(
+        "INSERT INTO pages (slug, type, title, compiled_truth, timeline, frontmatter) VALUES (?, ?, ?, ?, ?, ?)",
+      )
+      .run("legacy-page", "person", "Legacy Alpha", "legacy searchable body", "", "{}");
+  }
   legacy.close();
 
   return new BrainDatabase(dbPath);
@@ -91,6 +99,32 @@ describe("BrainDatabase.initialize", () => {
         )
         .run("legacy-invalid-type", "unknown", "Bad Type", "", "", "{}"),
     ).toThrow();
+
+    brain.close();
+  });
+
+  it("rebuilds FTS for migrated legacy rows and allows updates", () => {
+    const brain = createLegacyDatabase(true);
+
+    brain.initialize();
+
+    const migratedMatch = brain.db
+      .query<{ rowid: number }, []>("SELECT rowid FROM page_fts WHERE page_fts MATCH 'searchable'")
+      .get();
+
+    expect(migratedMatch?.rowid).toBeDefined();
+
+    expect(() =>
+      brain.db
+        .query("UPDATE pages SET compiled_truth = ? WHERE slug = ?")
+        .run("legacy updated body", "legacy-page"),
+    ).not.toThrow();
+
+    const updatedMatch = brain.db
+      .query<{ rowid: number }, []>("SELECT rowid FROM page_fts WHERE page_fts MATCH 'updated'")
+      .get();
+
+    expect(updatedMatch?.rowid).toBeDefined();
 
     brain.close();
   });
