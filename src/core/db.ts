@@ -63,6 +63,12 @@ interface TimelineEntryRow {
   detail: string;
 }
 
+interface StoredTimelineEntryRow extends TimelineEntryRow {
+  id: number;
+}
+
+const TIMELINE_ENTRY_PATTERN = /^- \*\*(\d{4}-\d{2}-\d{2})\*\*\s*\|\s*(.*?)\s+(?:—|-)\s+(.*)$/;
+
 function normalizeTags(tags: string[]): string[] {
   return Array.from(new Set(tags.map((tag) => tag.trim()).filter((tag) => tag.length > 0)));
 }
@@ -79,6 +85,41 @@ function mapPageRow(row: PageRow): PageRecord {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+function normalizeTimelineMarkdown(timeline: string): string {
+  return timeline.replace(/\r\n/g, "\n").trim();
+}
+
+function parseTimelineMarkdown(timeline: string): TimelineEntryRow[] {
+  const entries: TimelineEntryRow[] = [];
+
+  for (const line of normalizeTimelineMarkdown(timeline).split("\n")) {
+    const trimmedLine = line.trim();
+
+    if (trimmedLine.length === 0) {
+      continue;
+    }
+
+    const match = trimmedLine.match(TIMELINE_ENTRY_PATTERN);
+
+    if (!match) {
+      continue;
+    }
+
+    entries.push({
+      date: match[1],
+      source: match[2].trim(),
+      summary: match[3].trim(),
+      detail: "",
+    });
+  }
+
+  return entries;
+}
+
+function formatTimelineEntry(entry: TimelineEntryRow): string {
+  return `- **${entry.date}** | ${entry.source} — ${entry.summary}${entry.detail ? ` ${entry.detail}` : ""}`;
 }
 
 export class BrainDatabase {
@@ -127,6 +168,14 @@ export class BrainDatabase {
         input.timeline,
         input.frontmatter,
       );
+
+    const page = this.db.query<PageIdRow, [string]>("SELECT id FROM pages WHERE slug = ?1").get(input.slug);
+
+    if (!page) {
+      throw new Error(`Page not found after upsert: ${input.slug}`);
+    }
+
+    this.synchronizeTimelineFromMarkdown(page.id, input.timeline);
   }
 
   replacePageTags(slug: string, tags: string[]): void {
@@ -321,18 +370,7 @@ export class BrainDatabase {
            VALUES (?1, ?2, ?3, ?4, ?5)`,
         )
         .run(page.id, date, source, summary, detail);
-
-      const timelineLine = `- **${date}** | ${source} — ${summary}${detail ? ` ${detail}` : ""}`;
-      const nextTimeline = [timelineLine, page.timeline].filter(Boolean).join("\n");
-
-      this.upsertPage({
-        slug: page.slug,
-        type: page.type,
-        title: page.title,
-        compiledTruth: page.compiledTruth,
-        timeline: nextTimeline,
-        frontmatter: page.frontmatter,
-      });
+      this.writeTimelineMarkdown(page.id, this.renderTimelineMarkdown(this.listStoredTimelineEntries(page.id)));
     });
   }
 
@@ -343,14 +381,14 @@ export class BrainDatabase {
       return [];
     }
 
-    return this.db
-      .query<TimelineEntryRow, [number]>(
-        `SELECT date, source, summary, detail
-         FROM timeline_entries
-         WHERE page_id = ?1
-         ORDER BY date DESC, id DESC`,
-      )
-      .all(page.id);
+    let entries = this.listStoredTimelineEntries(page.id);
+
+    if (entries.length === 0 && normalizeTimelineMarkdown(page.timeline).length > 0) {
+      this.synchronizeTimelineFromMarkdown(page.id, page.timeline);
+      entries = this.listStoredTimelineEntries(page.id);
+    }
+
+    return entries.map(({ id: _id, ...entry }) => entry);
   }
 
   appendIngestLog(sourceType: string, sourceRef: string, pagesUpdated: string[], summary: string): void {
@@ -546,6 +584,51 @@ export class BrainDatabase {
   stats(): { pages: number } {
     const row = this.db.query<{ count: number }, []>("SELECT COUNT(*) AS count FROM pages").get();
     return { pages: row?.count ?? 0 };
+  }
+
+  private listStoredTimelineEntries(pageId: number): StoredTimelineEntryRow[] {
+    return this.db
+      .query<StoredTimelineEntryRow, [number]>(
+        `SELECT id, date, source, summary, detail
+         FROM timeline_entries
+         WHERE page_id = ?1
+         ORDER BY date DESC, id DESC`,
+      )
+      .all(pageId);
+  }
+
+  private renderTimelineMarkdown(entries: TimelineEntryRow[]): string {
+    return entries.map(formatTimelineEntry).join("\n");
+  }
+
+  private writeTimelineMarkdown(pageId: number, timeline: string): void {
+    this.db
+      .query(
+        `UPDATE pages
+         SET timeline = ?1,
+             updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+         WHERE id = ?2`,
+      )
+      .run(timeline, pageId);
+  }
+
+  private synchronizeTimelineFromMarkdown(pageId: number, timeline: string): void {
+    const parsedEntries = parseTimelineMarkdown(timeline);
+
+    this.db.query("DELETE FROM timeline_entries WHERE page_id = ?1").run(pageId);
+
+    if (parsedEntries.length > 0) {
+      const insertTimelineEntry = this.db.query(
+        `INSERT INTO timeline_entries (page_id, date, source, summary, detail)
+         VALUES (?1, ?2, ?3, ?4, ?5)`,
+      );
+
+      for (const entry of parsedEntries) {
+        insertTimelineEntry.run(pageId, entry.date, entry.source, entry.summary, entry.detail);
+      }
+    }
+
+    this.writeTimelineMarkdown(pageId, this.renderTimelineMarkdown(this.listStoredTimelineEntries(pageId)));
   }
 
   private upgradeLegacyPagesSchema(): boolean {
