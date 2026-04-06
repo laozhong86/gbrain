@@ -31,6 +31,20 @@ function decode(output: Uint8Array<ArrayBufferLike>): string {
   return new TextDecoder().decode(output);
 }
 
+function runCliWithPipe(args: string[], input: string) {
+  const escapedInput = input.replace(/'/g, "'\"'\"'");
+  const escapedArgs = args.map((arg) => `'${arg.replace(/'/g, "'\"'\"'")}'`).join(" ");
+
+  return Bun.spawnSync(
+    ["bash", "-lc", `printf '%s' '${escapedInput}' | bun run src/cli.ts ${escapedArgs}`],
+    {
+      cwd: process.cwd(),
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+  );
+}
+
 describe("meta commands", () => {
   it("prints tool discovery JSON", () => {
     const result = runCli(["--tools-json"]);
@@ -103,7 +117,7 @@ describe("meta commands", () => {
 
     expect(runCli(["init", dbPath]).exitCode).toBe(0);
 
-    const putResult = runCli(
+    const putResult = runCliWithPipe(
       ["put", "people/pedro-franceschi", "--db", dbPath],
       `---
 title: Pedro Franceschi
