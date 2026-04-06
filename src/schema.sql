@@ -3,13 +3,15 @@ PRAGMA foreign_keys = ON;
 CREATE TABLE IF NOT EXISTS pages (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   slug TEXT NOT NULL UNIQUE,
-  type TEXT NOT NULL,
+  type TEXT NOT NULL CHECK (
+    type IN ('person', 'company', 'deal', 'yc', 'civic', 'project', 'concept', 'source', 'media')
+  ),
   title TEXT NOT NULL,
   compiled_truth TEXT NOT NULL DEFAULT '',
   timeline TEXT NOT NULL DEFAULT '',
   frontmatter TEXT NOT NULL DEFAULT '{}',
-  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
-  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_pages_type ON pages(type);
@@ -41,6 +43,16 @@ CREATE TRIGGER IF NOT EXISTS pages_au AFTER UPDATE ON pages BEGIN
   VALUES (new.id, new.title, new.compiled_truth, new.timeline);
 END;
 
+CREATE TRIGGER IF NOT EXISTS pages_touch_updated_at
+AFTER UPDATE ON pages
+FOR EACH ROW
+WHEN new.updated_at = old.updated_at
+BEGIN
+  UPDATE pages
+  SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+  WHERE id = new.id;
+END;
+
 CREATE TABLE IF NOT EXISTS tags (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   page_id INTEGER NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
@@ -56,7 +68,7 @@ CREATE TABLE IF NOT EXISTS links (
   from_page_id INTEGER NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
   to_page_id INTEGER NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
   context TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   UNIQUE(from_page_id, to_page_id)
 );
 
@@ -70,7 +82,7 @@ CREATE TABLE IF NOT EXISTS page_embeddings (
   chunk_text TEXT NOT NULL,
   embedding BLOB NOT NULL,
   model TEXT NOT NULL DEFAULT 'text-embedding-3-small',
-  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_embeddings_page ON page_embeddings(page_id);
@@ -80,7 +92,7 @@ CREATE TABLE IF NOT EXISTS raw_data (
   page_id INTEGER NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
   source TEXT NOT NULL,
   data TEXT NOT NULL,
-  fetched_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+  fetched_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   UNIQUE(page_id, source)
 );
 
@@ -93,7 +105,7 @@ CREATE TABLE IF NOT EXISTS timeline_entries (
   source TEXT NOT NULL DEFAULT '',
   summary TEXT NOT NULL,
   detail TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_timeline_page ON timeline_entries(page_id);
@@ -105,7 +117,7 @@ CREATE TABLE IF NOT EXISTS ingest_log (
   source_ref TEXT NOT NULL,
   pages_updated TEXT NOT NULL DEFAULT '[]',
   summary TEXT NOT NULL DEFAULT '',
-  timestamp TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+  timestamp TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
 CREATE TABLE IF NOT EXISTS config (

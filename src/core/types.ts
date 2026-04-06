@@ -1,13 +1,16 @@
-export type PageType =
-  | "person"
-  | "company"
-  | "deal"
-  | "yc"
-  | "civic"
-  | "project"
-  | "concept"
-  | "source"
-  | "media";
+export const PAGE_TYPES = [
+  "person",
+  "company",
+  "deal",
+  "yc",
+  "civic",
+  "project",
+  "concept",
+  "source",
+  "media",
+] as const;
+
+export type PageType = (typeof PAGE_TYPES)[number];
 
 export interface PageRecord {
   id: number;
