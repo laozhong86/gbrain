@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import pkg from "../package.json";
 
 const cleanup: string[] = [];
 
@@ -44,7 +45,7 @@ describe("meta commands", () => {
     const result = runCli(["version"]);
 
     expect(result.exitCode).toBe(0);
-    expect(decode(result.stdout).trim()).toBe("0.1.0");
+    expect(decode(result.stdout).trim()).toBe(pkg.version);
   });
 
   it("reads and writes config values", () => {
@@ -55,14 +56,17 @@ describe("meta commands", () => {
 
     const setResult = runCli(["config", "set", "embedding_model", "local-embed", "--db", dbPath]);
     const getResult = runCli(["config", "embedding_model", "--db", dbPath]);
-    const missingResult = runCli(["config", "missing_key", "--db", dbPath]);
+    const invalidResult = runCli(["config", "version", "--db", dbPath]);
+    const missingResult = runCli(["config", "set", "unknown_key", "value", "--db", dbPath]);
 
     expect(setResult.exitCode).toBe(0);
     expect(decode(setResult.stdout).trim()).toBe("embedding_model=local-embed");
     expect(getResult.exitCode).toBe(0);
     expect(decode(getResult.stdout).trim()).toBe("local-embed");
-    expect(missingResult.exitCode).toBe(0);
-    expect(decode(missingResult.stdout).trim()).toBe("");
+    expect(invalidResult.exitCode).toBe(1);
+    expect(decode(invalidResult.stderr)).toContain("Unsupported config key: version");
+    expect(missingResult.exitCode).toBe(1);
+    expect(decode(missingResult.stderr)).toContain("Unsupported config key: unknown_key");
   });
 
   it("processes JSONL pipe requests and reports per-line errors", () => {
@@ -81,7 +85,7 @@ describe("meta commands", () => {
 
     const lines = decode(result.stdout).trim().split("\n").map((line) => JSON.parse(line));
 
-    expect(result.exitCode).toBe(0);
+    expect(result.exitCode).toBe(1);
     expect(lines).toHaveLength(2);
     expect(lines[0]).toEqual({ ok: true, result: "Pages: 0" });
     expect(lines[1]).toEqual({

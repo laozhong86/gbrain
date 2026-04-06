@@ -73,6 +73,7 @@ async function runPipe(dbPath: string): Promise<void> {
     input: process.stdin,
     crlfDelay: Infinity,
   });
+  let hadFailure = false;
 
   try {
     for await (const line of readline) {
@@ -104,12 +105,17 @@ async function runPipe(dbPath: string): Promise<void> {
         const result = await runCall(dbPath, request.tool, JSON.stringify(request.input));
         process.stdout.write(`${JSON.stringify({ ok: true, result })}\n`);
       } catch (error) {
+        hadFailure = true;
         const message = error instanceof Error ? error.message : String(error);
         process.stdout.write(`${JSON.stringify({ ok: false, error: message })}\n`);
       }
     }
   } finally {
     readline.close();
+  }
+
+  if (hadFailure) {
+    process.exitCode = 1;
   }
 }
 
