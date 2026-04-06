@@ -56,6 +56,13 @@ interface EmbeddingRow {
   embedding: Uint8Array | ArrayBuffer;
 }
 
+interface TimelineEntryRow {
+  date: string;
+  source: string;
+  summary: string;
+  detail: string;
+}
+
 function normalizeTags(tags: string[]): string[] {
   return Array.from(new Set(tags.map((tag) => tag.trim()).filter((tag) => tag.length > 0)));
 }
@@ -298,6 +305,61 @@ export class BrainDatabase {
       .get(slug);
 
     return row ? mapPageRow(row) : null;
+  }
+
+  addTimelineEntry(slug: string, date: string, source: string, summary: string, detail: string): void {
+    const page = this.getPageBySlug(slug);
+
+    if (!page) {
+      throw new Error(`Page not found: ${slug}`);
+    }
+
+    this.transaction(() => {
+      this.db
+        .query(
+          `INSERT INTO timeline_entries (page_id, date, source, summary, detail)
+           VALUES (?1, ?2, ?3, ?4, ?5)`,
+        )
+        .run(page.id, date, source, summary, detail);
+
+      const timelineLine = `- **${date}** | ${source} — ${summary}${detail ? ` ${detail}` : ""}`;
+      const nextTimeline = [timelineLine, page.timeline].filter(Boolean).join("\n");
+
+      this.upsertPage({
+        slug: page.slug,
+        type: page.type,
+        title: page.title,
+        compiledTruth: page.compiledTruth,
+        timeline: nextTimeline,
+        frontmatter: page.frontmatter,
+      });
+    });
+  }
+
+  listTimelineEntries(slug: string): TimelineEntryRow[] {
+    const page = this.getPageBySlug(slug);
+
+    if (!page) {
+      return [];
+    }
+
+    return this.db
+      .query<TimelineEntryRow, [number]>(
+        `SELECT date, source, summary, detail
+         FROM timeline_entries
+         WHERE page_id = ?1
+         ORDER BY date DESC, id DESC`,
+      )
+      .all(page.id);
+  }
+
+  appendIngestLog(sourceType: string, sourceRef: string, pagesUpdated: string[], summary: string): void {
+    this.db
+      .query(
+        `INSERT INTO ingest_log (source_type, source_ref, pages_updated, summary)
+         VALUES (?1, ?2, ?3, ?4)`,
+      )
+      .run(sourceType, sourceRef, JSON.stringify(pagesUpdated), summary);
   }
 
   deletePagesNotIn(slugs: string[]): void {

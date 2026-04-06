@@ -1,5 +1,6 @@
 import { runEmbed } from "./commands/embed";
 import { runExport } from "./commands/export";
+import { runIngest } from "./commands/ingest";
 import { runBacklinks, runLink, runUnlink } from "./commands/link";
 import { runGet } from "./commands/get";
 import { runInit } from "./commands/init";
@@ -10,6 +11,7 @@ import { runQuery } from "./commands/query";
 import { runSearch } from "./commands/search";
 import { runStats } from "./commands/stats";
 import { runTag, runTags, runUntag } from "./commands/tags";
+import { runTimelineAdd, runTimelineList } from "./commands/timeline";
 import { createOpenAIEmbeddingProvider } from "./core/embeddings";
 
 function consumeDbFlag(argv: string[]): { args: string[]; dbPath: string } {
@@ -113,6 +115,19 @@ async function run(argv: string[]): Promise<string> {
         rest.join(" "),
         createOpenAIEmbeddingProvider(process.env.OPENAI_API_KEY ?? ""),
       );
+    case "timeline":
+      return runTimelineList(db.dbPath, requireArg(rest[0], "slug"));
+    case "timeline-add":
+      return runTimelineAdd(
+        db.dbPath,
+        requireArg(rest[0], "slug"),
+        requireArg(rest[1], "date"),
+        requireArg(rest[2], "source"),
+        requireArg(rest[3], "summary"),
+        rest[4] ?? "",
+      );
+    case "ingest":
+      return runIngest(db.dbPath, requireArg(rest[0], "file"), rest[1] ?? "doc");
     default:
       throw new Error(`Unknown command: ${command ?? ""}`.trim());
   }
