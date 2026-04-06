@@ -98,7 +98,17 @@ async function callRawTool(
     brain.initialize();
 
     if (input.source !== undefined && input.data !== undefined) {
-      brain.replaceRawData(input.slug, [{ source: input.source, data: input.data }]);
+      const existingRecords = brain
+        .listRawData()
+        .filter((record) => record.slug === input.slug)
+        .map(({ source, data }) => ({ source, data }));
+      const mergedRecords = new Map(existingRecords.map((record) => [record.source, record.data]));
+
+      mergedRecords.set(input.source, input.data);
+      brain.replaceRawData(
+        input.slug,
+        [...mergedRecords.entries()].map(([source, data]) => ({ source, data })),
+      );
       return `Stored raw data for ${input.slug}/${input.source}`;
     }
 
