@@ -3,9 +3,12 @@ import type { FtsResult } from "./fts";
 export interface VectorSearchResult {
   slug: string;
   score: number;
+  chunkText: string;
 }
 
 export interface EmbeddingProvider {
+  model: string;
+  dimensions: number;
   embed(text: string): Promise<number[]>;
 }
 
@@ -15,6 +18,8 @@ export function createOpenAIEmbeddingProvider(apiKey: string): EmbeddingProvider
   }
 
   return {
+    model: "text-embedding-3-small",
+    dimensions: 1536,
     async embed(text: string): Promise<number[]> {
       const response = await fetch("https://api.openai.com/v1/embeddings", {
         method: "POST",
@@ -82,14 +87,21 @@ export function mergeHybridResults(
   ftsResults: FtsResult[],
   vectorResults: VectorSearchResult[],
 ): Array<{ slug: string; score: number }> {
+  const reciprocalRankBase = 60;
   const merged = new Map<string, number>();
 
-  for (const result of ftsResults) {
-    merged.set(result.slug, (merged.get(result.slug) ?? 0) + result.score * 0.4);
+  for (const [index, result] of ftsResults.entries()) {
+    merged.set(
+      result.slug,
+      (merged.get(result.slug) ?? 0) + 1 / (reciprocalRankBase + index + 1),
+    );
   }
 
-  for (const result of vectorResults) {
-    merged.set(result.slug, (merged.get(result.slug) ?? 0) + result.score * 0.6);
+  for (const [index, result] of vectorResults.entries()) {
+    merged.set(
+      result.slug,
+      (merged.get(result.slug) ?? 0) + 1 / (reciprocalRankBase + index + 1),
+    );
   }
 
   return [...merged.entries()]

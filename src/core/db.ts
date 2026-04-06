@@ -47,6 +47,7 @@ interface LinkInput {
 
 interface EmbeddingRow {
   slug: string;
+  chunk_text: string;
   embedding: Uint8Array | ArrayBuffer;
 }
 
@@ -290,7 +291,11 @@ export class BrainDatabase {
     return row ? mapPageRow(row) : null;
   }
 
-  replaceEmbeddings(slug: string, chunks: Array<{ chunkText: string; values: number[] }>): void {
+  replaceEmbeddings(
+    slug: string,
+    chunks: Array<{ chunkText: string; values: number[] }>,
+    provider: EmbeddingProvider,
+  ): void {
     const page = this.getPageBySlug(slug);
 
     if (!page) {
@@ -306,12 +311,18 @@ export class BrainDatabase {
       );
 
       for (const [chunkIndex, chunk] of chunks.entries()) {
+        if (chunk.values.length !== provider.dimensions) {
+          throw new Error(
+            `Embedding dimensions mismatch for ${slug}: expected ${provider.dimensions}, received ${chunk.values.length}`,
+          );
+        }
+
         insertEmbedding.run(
           page.id,
           chunkIndex,
           chunk.chunkText,
           encodeEmbedding(chunk.values),
-          "text-embedding-3-small",
+          provider.model,
         );
       }
     })();
@@ -324,25 +335,42 @@ export class BrainDatabase {
   ): Promise<VectorSearchResult[]> {
     const normalizedLimit = Number.isInteger(limit) && limit > 0 ? limit : 10;
     const queryEmbedding = await provider.embed(question);
+
+    if (queryEmbedding.length !== provider.dimensions) {
+      throw new Error(
+        `Embedding dimensions mismatch for query: expected ${provider.dimensions}, received ${queryEmbedding.length}`,
+      );
+    }
+
     const rows = this.db
-      .query<EmbeddingRow, []>(
-        `SELECT pages.slug, page_embeddings.embedding
+      .query<EmbeddingRow, [string]>(
+        `SELECT pages.slug, page_embeddings.chunk_text, page_embeddings.embedding
          FROM page_embeddings
-         INNER JOIN pages ON pages.id = page_embeddings.page_id`,
+         INNER JOIN pages ON pages.id = page_embeddings.page_id
+         WHERE page_embeddings.model = ?1`,
       )
-      .all();
-    const bestBySlug = new Map<string, number>();
+      .all(provider.model);
+    const bestBySlug = new Map<string, VectorSearchResult>();
 
     for (const row of rows) {
       const bytes = row.embedding instanceof Uint8Array ? row.embedding : new Uint8Array(row.embedding);
+      if (bytes.byteLength !== provider.dimensions * Float32Array.BYTES_PER_ELEMENT) {
+        continue;
+      }
+
       const score = cosineSimilarity(queryEmbedding, decodeEmbedding(bytes));
-      bestBySlug.set(row.slug, Math.max(bestBySlug.get(row.slug) ?? Number.NEGATIVE_INFINITY, score));
+      const previous = bestBySlug.get(row.slug);
+
+      if (!previous || score > previous.score) {
+        bestBySlug.set(row.slug, {
+          slug: row.slug,
+          score,
+          chunkText: row.chunk_text,
+        });
+      }
     }
 
-    return [...bestBySlug.entries()]
-      .map(([slug, score]) => ({ slug, score }))
-      .sort((left, right) => right.score - left.score)
-      .slice(0, normalizedLimit);
+    return [...bestBySlug.values()].sort((left, right) => right.score - left.score).slice(0, normalizedLimit);
   }
 
   listPages(options: ListPagesOptions = {}): PageRecord[] {

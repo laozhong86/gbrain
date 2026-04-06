@@ -28,7 +28,7 @@ export async function runEmbed(
         });
       }
 
-      brain.replaceEmbeddings(page.slug, preparedChunks);
+      brain.replaceEmbeddings(page.slug, preparedChunks, provider);
     }
 
     return `Embedded ${pages.length} page(s)`;
