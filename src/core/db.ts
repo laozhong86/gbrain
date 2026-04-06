@@ -241,6 +241,24 @@ export class BrainDatabase {
     this.replacePageTags(slug, tags);
   }
 
+  getConfig(key: string): string | null {
+    const row = this.db
+      .query<{ value: string }, [string]>("SELECT value FROM config WHERE key = ?1")
+      .get(key);
+
+    return row?.value ?? null;
+  }
+
+  setConfig(key: string, value: string): void {
+    this.db
+      .query(
+        `INSERT INTO config (key, value)
+         VALUES (?1, ?2)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+      )
+      .run(key, value);
+  }
+
   addTagToPage(slug: string, tag: string): void {
     const page = this.db.query<PageIdRow, [string]>("SELECT id FROM pages WHERE slug = ?1").get(slug);
     const normalizedTag = normalizeTags([tag])[0];

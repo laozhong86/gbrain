@@ -1,4 +1,6 @@
+import { createInterface } from "node:readline";
 import { runCall } from "./commands/call";
+import { runConfigGet, runConfigSet } from "./commands/config";
 import { runEmbed } from "./commands/embed";
 import { runExport } from "./commands/export";
 import { runIngest } from "./commands/ingest";
@@ -14,7 +16,9 @@ import { runServe } from "./commands/serve";
 import { runStats } from "./commands/stats";
 import { runTag, runTags, runUntag } from "./commands/tags";
 import { runTimelineAdd, runTimelineList } from "./commands/timeline";
+import { runVersion } from "./commands/version";
 import { createOpenAIEmbeddingProvider } from "./core/embeddings";
+import { getToolDefinitions } from "./mcp/server";
 
 function consumeDbFlag(argv: string[]): { args: string[]; dbPath: string } {
   const args = [...argv];
@@ -60,7 +64,60 @@ function consumeOption(argv: string[], flag: string): { args: string[]; value?: 
   return { args, value };
 }
 
+function getToolsJson(): string {
+  return JSON.stringify({ tools: getToolDefinitions() });
+}
+
+async function runPipe(dbPath: string): Promise<void> {
+  const readline = createInterface({
+    input: process.stdin,
+    crlfDelay: Infinity,
+  });
+
+  try {
+    for await (const line of readline) {
+      const trimmedLine = line.trim();
+
+      if (trimmedLine.length === 0) {
+        continue;
+      }
+
+      try {
+        const request = JSON.parse(trimmedLine) as {
+          input?: unknown;
+          tool?: unknown;
+        };
+
+        if (typeof request.tool !== "string") {
+          throw new Error("Pipe request must include a string tool");
+        }
+
+        if (
+          request.input === undefined ||
+          request.input === null ||
+          Array.isArray(request.input) ||
+          typeof request.input !== "object"
+        ) {
+          throw new Error("Pipe request input must be a JSON object");
+        }
+
+        const result = await runCall(dbPath, request.tool, JSON.stringify(request.input));
+        process.stdout.write(`${JSON.stringify({ ok: true, result })}\n`);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        process.stdout.write(`${JSON.stringify({ ok: false, error: message })}\n`);
+      }
+    }
+  } finally {
+    readline.close();
+  }
+}
+
 async function run(argv: string[]): Promise<string | undefined> {
+  if (argv.includes("--tools-json")) {
+    return getToolsJson();
+  }
+
   const db = consumeDbFlag(argv);
   const tag = consumeOption(db.args, "--tag");
   const [command, ...rest] = tag.args;
@@ -126,6 +183,21 @@ async function run(argv: string[]): Promise<string | undefined> {
         requireArg(rest[0], "tool"),
         requireArg(rest[1], "payload"),
       );
+    case "version":
+      return runVersion();
+    case "config":
+      if (rest[0] === "set") {
+        return runConfigSet(
+          db.dbPath,
+          requireArg(rest[1], "key"),
+          requireArg(rest[2], "value"),
+        );
+      }
+
+      return runConfigGet(db.dbPath, requireArg(rest[0], "key"));
+    case "pipe":
+      await runPipe(db.dbPath);
+      return undefined;
     case "timeline":
       return runTimelineList(db.dbPath, requireArg(rest[0], "slug"));
     case "timeline-add":
