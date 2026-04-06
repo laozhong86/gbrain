@@ -30,21 +30,40 @@ function requireArg(value: string | undefined, name: string): string {
   return value;
 }
 
+function consumeOption(argv: string[], flag: string): { args: string[]; value?: string } {
+  const args = [...argv];
+  const index = args.indexOf(flag);
+
+  if (index === -1) {
+    return { args };
+  }
+
+  const value = args[index + 1];
+
+  if (!value) {
+    throw new Error(`Missing value for ${flag}`);
+  }
+
+  args.splice(index, 2);
+  return { args, value };
+}
+
 function run(argv: string[]): string {
-  const { args, dbPath } = consumeDbFlag(argv);
-  const [command, ...rest] = args;
+  const db = consumeDbFlag(argv);
+  const tag = consumeOption(db.args, "--tag");
+  const [command, ...rest] = tag.args;
 
   switch (command) {
     case "init":
-      return runInit(dbPath);
+      return runInit(db.dbPath);
     case "get":
-      return runGet(dbPath, requireArg(rest[0], "slug"));
+      return runGet(db.dbPath, requireArg(rest[0], "slug"));
     case "put":
-      return runPut(dbPath, requireArg(rest[0], "slug"), requireArg(rest[1], "file"));
+      return runPut(db.dbPath, requireArg(rest[0], "slug"), requireArg(rest[1], "file"));
     case "list":
-      return runList(dbPath);
+      return runList(db.dbPath, tag.value);
     case "stats":
-      return runStats(dbPath);
+      return runStats(db.dbPath);
     default:
       throw new Error(`Unknown command: ${command ?? ""}`.trim());
   }

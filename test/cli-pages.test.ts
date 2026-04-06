@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
+import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -61,17 +62,20 @@ Builds agent software.
     const putResult = runCli(["put", "companies/river-ai", "--db", dbPath, pagePath]);
     const getResult = runCli(["get", "companies/river-ai", "--db", dbPath]);
     const listResult = runCli(["list", "--db", dbPath]);
+    const taggedListResult = runCli(["list", "--tag", "ai", "--db", dbPath]);
     const statsResult = runCli(["stats", "--db", dbPath]);
 
     expect(initResult.exitCode).toBe(0);
     expect(putResult.exitCode).toBe(0);
     expect(getResult.exitCode).toBe(0);
     expect(listResult.exitCode).toBe(0);
+    expect(taggedListResult.exitCode).toBe(0);
     expect(statsResult.exitCode).toBe(0);
 
     expect(decode(getResult.stdout)).toContain("# River AI");
     expect(decode(getResult.stdout)).toContain("- **2026-04-05** | note");
     expect(decode(listResult.stdout)).toContain("companies/river-ai | company | River AI");
+    expect(decode(taggedListResult.stdout)).toContain("companies/river-ai | company | River AI");
     expect(decode(statsResult.stdout)).toContain("Pages: 1");
   });
 
@@ -85,5 +89,80 @@ Builds agent software.
     expect(initResult.exitCode).toBe(0);
     expect(getResult.exitCode).toBe(1);
     expect(decode(getResult.stderr)).toContain("Page not found: missing-page");
+  });
+
+  it("writes tags and filters list output by tag", () => {
+    const dir = createTempDir();
+    const dbPath = join(dir, "brain.db");
+    const companyPath = join(dir, "company.md");
+    const conceptPath = join(dir, "concept.md");
+
+    writeFileSync(
+      companyPath,
+      `---
+title: River AI
+type: company
+tags:
+  - ai
+  - infra
+---
+
+# River AI
+`,
+    );
+    writeFileSync(
+      conceptPath,
+      `---
+title: Hiring Loop
+type: concept
+tags:
+  - recruiting
+---
+
+# Hiring Loop
+`,
+    );
+
+    expect(runCli(["init", "--db", dbPath]).exitCode).toBe(0);
+    expect(runCli(["put", "companies/river-ai", "--db", dbPath, companyPath]).exitCode).toBe(0);
+    expect(runCli(["put", "concepts/hiring-loop", "--db", dbPath, conceptPath]).exitCode).toBe(0);
+
+    const taggedListResult = runCli(["list", "--tag", "ai", "--db", dbPath]);
+    const taggedOutput = decode(taggedListResult.stdout);
+
+    expect(taggedListResult.exitCode).toBe(0);
+    expect(taggedOutput).toContain("companies/river-ai | company | River AI");
+    expect(taggedOutput).not.toContain("concepts/hiring-loop | concept | Hiring Loop");
+  });
+
+  it("returns a controlled error for malformed stored frontmatter", () => {
+    const dir = createTempDir();
+    const dbPath = join(dir, "brain.db");
+    const pagePath = join(dir, "page.md");
+
+    writeFileSync(
+      pagePath,
+      `---
+title: River AI
+type: company
+---
+
+# River AI
+`,
+    );
+
+    expect(runCli(["init", "--db", dbPath]).exitCode).toBe(0);
+    expect(runCli(["put", "companies/river-ai", "--db", dbPath, pagePath]).exitCode).toBe(0);
+
+    const db = new Database(dbPath);
+    db.query("UPDATE pages SET frontmatter = ? WHERE slug = ?").run("{bad json", "companies/river-ai");
+    db.close();
+
+    const getResult = runCli(["get", "companies/river-ai", "--db", dbPath]);
+
+    expect(getResult.exitCode).toBe(1);
+    expect(decode(getResult.stderr)).toContain(
+      "Stored frontmatter is invalid JSON for page: companies/river-ai",
+    );
   });
 });

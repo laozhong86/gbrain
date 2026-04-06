@@ -19,9 +19,30 @@ function extractTitle(value: unknown): string {
   return value;
 }
 
+function extractTags(value: unknown): string[] {
+  if (value === undefined) {
+    return [];
+  }
+
+  if (!Array.isArray(value)) {
+    throw new Error("Page frontmatter tags must be a list of strings");
+  }
+
+  const tags = value.map((tag) => {
+    if (typeof tag !== "string") {
+      throw new Error("Page frontmatter tags must be a list of strings");
+    }
+
+    return tag;
+  });
+
+  return tags;
+}
+
 export function runPutFromSource(dbPath: string, slug: string, source: string): string {
   const parsed = parseMarkdownDocument(source);
   const brain = new BrainDatabase(dbPath);
+  const tags = extractTags(parsed.frontmatter.tags);
 
   try {
     brain.initialize();
@@ -33,6 +54,7 @@ export function runPutFromSource(dbPath: string, slug: string, source: string): 
       timeline: parsed.timeline,
       frontmatter: JSON.stringify(parsed.frontmatter),
     });
+    brain.replacePageTags(slug, tags);
 
     return `Saved ${slug}`;
   } finally {

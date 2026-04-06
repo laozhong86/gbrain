@@ -29,6 +29,10 @@ interface PageRow {
   updated_at: string;
 }
 
+interface PageIdRow {
+  id: number;
+}
+
 function mapPageRow(row: PageRow): PageRecord {
   return {
     id: row.id,
@@ -87,6 +91,30 @@ export class BrainDatabase {
       );
   }
 
+  replacePageTags(slug: string, tags: string[]): void {
+    const page = this.db.query<PageIdRow, [string]>("SELECT id FROM pages WHERE slug = ?1").get(slug);
+
+    if (!page) {
+      throw new Error(`Page not found: ${slug}`);
+    }
+
+    const normalizedTags = Array.from(
+      new Set(tags.map((tag) => tag.trim()).filter((tag) => tag.length > 0)),
+    );
+
+    this.db.transaction(() => {
+      this.db.query("DELETE FROM tags WHERE page_id = ?1").run(page.id);
+
+      const insertTag = this.db.query(
+        "INSERT INTO tags (page_id, tag) VALUES (?1, ?2) ON CONFLICT(page_id, tag) DO NOTHING",
+      );
+
+      for (const tag of normalizedTags) {
+        insertTag.run(page.id, tag);
+      }
+    })();
+  }
+
   getPageBySlug(slug: string): PageRecord | null {
     const row = this.db
       .query<PageRow, [string]>(
@@ -102,19 +130,37 @@ export class BrainDatabase {
   listPages(options: ListPagesOptions = {}): PageRecord[] {
     const clauses: string[] = [];
     const params: Array<string | number> = [];
+    const joins: string[] = [];
 
     if (options.type) {
       clauses.push("type = ?");
       params.push(options.type);
     }
 
+    if (options.tag) {
+      joins.push("INNER JOIN tags ON tags.page_id = pages.id");
+      clauses.push("tags.tag = ?");
+      params.push(options.tag);
+    }
+
     const whereClause = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
     const limit = options.limit ?? 50;
+    const joinClause = joins.length > 0 ? `${joins.join(" ")}` : "";
 
     return this.db
       .query<PageRow, Array<string | number>>(
-        `SELECT id, slug, type, title, compiled_truth, timeline, frontmatter, created_at, updated_at
+        `SELECT
+           pages.id,
+           pages.slug,
+           pages.type,
+           pages.title,
+           pages.compiled_truth,
+           pages.timeline,
+           pages.frontmatter,
+           pages.created_at,
+           pages.updated_at
          FROM pages
+         ${joinClause}
          ${whereClause}
          ORDER BY slug
          LIMIT ?`,
