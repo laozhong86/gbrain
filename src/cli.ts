@@ -1,7 +1,9 @@
 import { runEmbed } from "./commands/embed";
+import { runExport } from "./commands/export";
 import { runBacklinks, runLink, runUnlink } from "./commands/link";
 import { runGet } from "./commands/get";
 import { runInit } from "./commands/init";
+import { runImport } from "./commands/import";
 import { runList } from "./commands/list";
 import { runPut } from "./commands/put";
 import { runQuery } from "./commands/query";
@@ -66,6 +68,14 @@ async function run(argv: string[]): Promise<string> {
       return runGet(db.dbPath, requireArg(rest[0], "slug"));
     case "put":
       return runPut(db.dbPath, requireArg(rest[0], "slug"), requireArg(rest[1], "file"));
+    case "import":
+      return runImport(
+        db.dbPath,
+        requireArg(rest[0], "sourceDir"),
+        rest.includes("--with-embeddings"),
+      );
+    case "export":
+      return runExport(db.dbPath, rest[0] ?? "export");
     case "list":
       return runList(db.dbPath, tag.value);
     case "link":

@@ -10,6 +10,10 @@ export function normalizeWikiTarget(target: string): string {
   return target.replace(/^(\.\.\/)+/, "").replace(/\.md$/, "");
 }
 
+export function slugToMarkdownPath(slug: string): string {
+  return `${slug}.md`;
+}
+
 export function extractWikiLinks(markdown: string): ExtractedLink[] {
   const links: ExtractedLink[] = [];
 

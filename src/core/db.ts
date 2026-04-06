@@ -45,6 +45,11 @@ interface LinkInput {
   context: string;
 }
 
+interface RawDataRecord {
+  source: string;
+  data: string;
+}
+
 interface EmbeddingRow {
   slug: string;
   chunk_text: string;
@@ -88,6 +93,10 @@ export class BrainDatabase {
 
   close(): void {
     this.db.close();
+  }
+
+  transaction<T>(callback: () => T): T {
+    return this.db.transaction(callback)();
   }
 
   upsertPage(input: PageUpsertInput): void {
@@ -289,6 +298,53 @@ export class BrainDatabase {
       .get(slug);
 
     return row ? mapPageRow(row) : null;
+  }
+
+  replaceRawData(slug: string, records: RawDataRecord[]): void {
+    const page = this.getPageBySlug(slug);
+
+    if (!page) {
+      throw new Error(`Page not found: ${slug}`);
+    }
+
+    const normalizedRecords = new Map<string, string>();
+
+    for (const record of records) {
+      const source = record.source.trim();
+
+      if (source.length === 0) {
+        continue;
+      }
+
+      normalizedRecords.set(source, record.data);
+    }
+
+    this.db.transaction(() => {
+      this.db.query("DELETE FROM raw_data WHERE page_id = ?1").run(page.id);
+
+      const insertRaw = this.db.query(
+        `INSERT INTO raw_data (page_id, source, data)
+         VALUES (?1, ?2, ?3)
+         ON CONFLICT(page_id, source) DO UPDATE SET
+           data = excluded.data,
+           fetched_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`,
+      );
+
+      for (const [source, data] of normalizedRecords) {
+        insertRaw.run(page.id, source, data);
+      }
+    })();
+  }
+
+  listRawData(): Array<{ slug: string; source: string; data: string }> {
+    return this.db
+      .query<{ slug: string; source: string; data: string }, []>(
+        `SELECT pages.slug, raw_data.source, raw_data.data
+         FROM raw_data
+         INNER JOIN pages ON pages.id = raw_data.page_id
+         ORDER BY pages.slug, raw_data.source`,
+      )
+      .all();
   }
 
   replaceEmbeddings(

@@ -38,6 +38,30 @@ export function renderMarkdownDocument(doc: ParsedMarkdownDocument): string {
   return `---\n${yaml}\n---\n\n${body}\n`;
 }
 
+export function parseStoredFrontmatter(
+  slug: string,
+  frontmatter: string,
+): Record<string, unknown> {
+  try {
+    return JSON.parse(frontmatter) as Record<string, unknown>;
+  } catch {
+    throw new Error(`Stored frontmatter is invalid JSON for page: ${slug}`);
+  }
+}
+
+export function renderStoredMarkdownDocument(
+  slug: string,
+  frontmatter: string,
+  compiledTruth: string,
+  timeline: string,
+): string {
+  return renderMarkdownDocument({
+    frontmatter: parseStoredFrontmatter(slug, frontmatter),
+    compiledTruth,
+    timeline,
+  });
+}
+
 export function chunkPageContent(compiledTruth: string, timeline: string): string[] {
   const source = timeline
     ? `${compiledTruth.trim()}\n\n## Timeline\n\n${timeline.trim()}`
