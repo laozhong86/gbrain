@@ -1,5 +1,6 @@
 import { Database } from "bun:sqlite";
 import { readFileSync } from "node:fs";
+import type { ListPagesOptions, PageRecord, PageUpsertInput } from "./types";
 import { PAGE_TYPE_SQL_LIST } from "./types";
 
 const schemaSql = readFileSync(new URL("../schema.sql", import.meta.url), "utf8");
@@ -15,6 +16,32 @@ CREATE TABLE pages (
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 )`;
+
+interface PageRow {
+  id: number;
+  slug: string;
+  type: PageRecord["type"];
+  title: string;
+  compiled_truth: string;
+  timeline: string;
+  frontmatter: string;
+  created_at: string;
+  updated_at: string;
+}
+
+function mapPageRow(row: PageRow): PageRecord {
+  return {
+    id: row.id,
+    slug: row.slug,
+    type: row.type,
+    title: row.title,
+    compiledTruth: row.compiled_truth,
+    timeline: row.timeline,
+    frontmatter: row.frontmatter,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
 
 export class BrainDatabase {
   readonly db: Database;
@@ -35,6 +62,70 @@ export class BrainDatabase {
 
   close(): void {
     this.db.close();
+  }
+
+  upsertPage(input: PageUpsertInput): void {
+    this.db
+      .query(
+        `INSERT INTO pages (slug, type, title, compiled_truth, timeline, frontmatter)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+         ON CONFLICT(slug) DO UPDATE SET
+           type = excluded.type,
+           title = excluded.title,
+           compiled_truth = excluded.compiled_truth,
+           timeline = excluded.timeline,
+           frontmatter = excluded.frontmatter,
+           updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`,
+      )
+      .run(
+        input.slug,
+        input.type,
+        input.title,
+        input.compiledTruth,
+        input.timeline,
+        input.frontmatter,
+      );
+  }
+
+  getPageBySlug(slug: string): PageRecord | null {
+    const row = this.db
+      .query<PageRow, [string]>(
+        `SELECT id, slug, type, title, compiled_truth, timeline, frontmatter, created_at, updated_at
+         FROM pages
+         WHERE slug = ?1`,
+      )
+      .get(slug);
+
+    return row ? mapPageRow(row) : null;
+  }
+
+  listPages(options: ListPagesOptions = {}): PageRecord[] {
+    const clauses: string[] = [];
+    const params: Array<string | number> = [];
+
+    if (options.type) {
+      clauses.push("type = ?");
+      params.push(options.type);
+    }
+
+    const whereClause = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
+    const limit = options.limit ?? 50;
+
+    return this.db
+      .query<PageRow, Array<string | number>>(
+        `SELECT id, slug, type, title, compiled_truth, timeline, frontmatter, created_at, updated_at
+         FROM pages
+         ${whereClause}
+         ORDER BY slug
+         LIMIT ?`,
+      )
+      .all(...params, limit)
+      .map(mapPageRow);
+  }
+
+  stats(): { pages: number } {
+    const row = this.db.query<{ count: number }, []>("SELECT COUNT(*) AS count FROM pages").get();
+    return { pages: row?.count ?? 0 };
   }
 
   private upgradeLegacyPagesSchema(): boolean {
