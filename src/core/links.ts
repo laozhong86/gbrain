@@ -4,7 +4,7 @@ export interface ExtractedLink {
   context: string;
 }
 
-const wikiLinkRegex = /\[([^\]]+)\]\((?:\.\.\/)?([\w/-]+)\.md\)/g;
+const wikiLinkRegex = /\[([^\]]+)\]\(((?:\.\.\/)*[\w/-]+\.md)\)/g;
 
 export function normalizeWikiTarget(target: string): string {
   return target.replace(/^(\.\.\/)+/, "").replace(/\.md$/, "");

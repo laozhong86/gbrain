@@ -33,6 +33,15 @@ interface PageIdRow {
   id: number;
 }
 
+interface LinkInput {
+  targetSlug: string;
+  context: string;
+}
+
+function normalizeTags(tags: string[]): string[] {
+  return Array.from(new Set(tags.map((tag) => tag.trim()).filter((tag) => tag.length > 0)));
+}
+
 function mapPageRow(row: PageRow): PageRecord {
   return {
     id: row.id,
@@ -98,9 +107,7 @@ export class BrainDatabase {
       throw new Error(`Page not found: ${slug}`);
     }
 
-    const normalizedTags = Array.from(
-      new Set(tags.map((tag) => tag.trim()).filter((tag) => tag.length > 0)),
-    );
+    const normalizedTags = normalizeTags(tags);
 
     this.db.transaction(() => {
       this.db.query("DELETE FROM tags WHERE page_id = ?1").run(page.id);
@@ -130,6 +137,36 @@ export class BrainDatabase {
 
   replaceTags(slug: string, tags: string[]): void {
     this.replacePageTags(slug, tags);
+  }
+
+  addTagToPage(slug: string, tag: string): void {
+    const page = this.db.query<PageIdRow, [string]>("SELECT id FROM pages WHERE slug = ?1").get(slug);
+    const normalizedTag = normalizeTags([tag])[0];
+
+    if (!page) {
+      throw new Error(`Page not found: ${slug}`);
+    }
+
+    if (!normalizedTag) {
+      return;
+    }
+
+    this.db
+      .query(
+        "INSERT INTO tags (page_id, tag) VALUES (?1, ?2) ON CONFLICT(page_id, tag) DO NOTHING",
+      )
+      .run(page.id, normalizedTag);
+  }
+
+  removeTagFromPage(slug: string, tag: string): void {
+    const page = this.db.query<PageIdRow, [string]>("SELECT id FROM pages WHERE slug = ?1").get(slug);
+    const normalizedTag = normalizeTags([tag])[0];
+
+    if (!page || !normalizedTag) {
+      return;
+    }
+
+    this.db.query("DELETE FROM tags WHERE page_id = ?1 AND tag = ?2").run(page.id, normalizedTag);
   }
 
   linkPages(fromSlug: string, toSlug: string, context = ""): void {
@@ -183,6 +220,50 @@ export class BrainDatabase {
       )
       .all(page.id)
       .map((row) => row.slug);
+  }
+
+  replaceOutgoingLinks(slug: string, links: LinkInput[]): void {
+    const page = this.db.query<PageIdRow, [string]>("SELECT id FROM pages WHERE slug = ?1").get(slug);
+
+    if (!page) {
+      throw new Error(`Page not found: ${slug}`);
+    }
+
+    const normalizedLinks = new Map<string, string>();
+
+    for (const link of links) {
+      if (link.targetSlug === slug) {
+        continue;
+      }
+
+      const targetPage = this.db
+        .query<PageIdRow, [string]>("SELECT id FROM pages WHERE slug = ?1")
+        .get(link.targetSlug);
+
+      if (targetPage) {
+        normalizedLinks.set(link.targetSlug, link.context);
+      }
+    }
+
+    this.db.transaction(() => {
+      this.db.query("DELETE FROM links WHERE from_page_id = ?1").run(page.id);
+
+      const insertLink = this.db.query(
+        `INSERT INTO links (from_page_id, to_page_id, context)
+         VALUES (?1, ?2, ?3)
+         ON CONFLICT(from_page_id, to_page_id) DO UPDATE SET context = excluded.context`,
+      );
+
+      for (const [targetSlug, context] of normalizedLinks) {
+        const targetPage = this.db
+          .query<PageIdRow, [string]>("SELECT id FROM pages WHERE slug = ?1")
+          .get(targetSlug);
+
+        if (targetPage) {
+          insertLink.run(page.id, targetPage.id, context);
+        }
+      }
+    })();
   }
 
   getPageBySlug(slug: string): PageRecord | null {

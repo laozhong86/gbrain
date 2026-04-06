@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
-import { parseMarkdownDocument } from "../core/markdown";
 import { BrainDatabase } from "../core/db";
+import { extractWikiLinks } from "../core/links";
+import { parseMarkdownDocument } from "../core/markdown";
 import { PAGE_TYPES, type PageType } from "../core/types";
 
 function extractPageType(value: unknown): PageType {
@@ -55,6 +56,7 @@ export function runPutFromSource(dbPath: string, slug: string, source: string): 
       frontmatter: JSON.stringify(parsed.frontmatter),
     });
     brain.replaceTags(slug, tags);
+    brain.replaceOutgoingLinks(slug, extractWikiLinks(`${parsed.compiledTruth}\n${parsed.timeline}`));
 
     return `Saved ${slug}`;
   } finally {

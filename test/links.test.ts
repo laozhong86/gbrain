@@ -50,6 +50,15 @@ describe("links", () => {
     expect(normalizeWikiTarget("../companies/river-ai.md")).toBe("companies/river-ai");
   });
 
+  it("extracts links with multi-level relative paths", () => {
+    const links = extractWikiLinks(
+      "See [Acme](../../companies/acme.md) and [Ali](../../../people/ali-partovi.md).",
+    );
+
+    expect(links.map((link) => link.targetSlug)).toEqual(["companies/acme", "people/ali-partovi"]);
+    expect(normalizeWikiTarget("../../companies/acme.md")).toBe("companies/acme");
+  });
+
   it("links pages, lists backlinks, and removes links", () => {
     const dbPath = createDatabasePath();
 
@@ -103,5 +112,64 @@ tags:
     } finally {
       brain.close();
     }
+  });
+
+  it("synchronizes outgoing links on put when links are added, changed, and removed", () => {
+    const dbPath = createDatabasePath();
+
+    seedPage(dbPath, "people/ali-partovi", "Ali Partovi", "person");
+    seedPage(dbPath, "companies/river-ai", "River AI", "company");
+    seedPage(dbPath, "companies/acme", "Acme", "company");
+
+    runPutFromSource(
+      dbPath,
+      "concepts/market-map",
+      `---
+title: Market Map
+type: concept
+---
+
+# Market Map
+
+Mentions [River AI](../../companies/river-ai.md).
+`,
+    );
+
+    expect(runBacklinks(dbPath, "companies/river-ai")).toBe("concepts/market-map");
+    expect(runBacklinks(dbPath, "companies/acme")).toBe("");
+
+    runPutFromSource(
+      dbPath,
+      "concepts/market-map",
+      `---
+title: Market Map
+type: concept
+---
+
+# Market Map
+
+Now mentions [Acme](../../companies/acme.md).
+`,
+    );
+
+    expect(runBacklinks(dbPath, "companies/river-ai")).toBe("");
+    expect(runBacklinks(dbPath, "companies/acme")).toBe("concepts/market-map");
+
+    runPutFromSource(
+      dbPath,
+      "concepts/market-map",
+      `---
+title: Market Map
+type: concept
+---
+
+# Market Map
+
+No linked companies now.
+`,
+    );
+
+    expect(runBacklinks(dbPath, "companies/river-ai")).toBe("");
+    expect(runBacklinks(dbPath, "companies/acme")).toBe("");
   });
 });

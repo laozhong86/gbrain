@@ -16,8 +16,7 @@ export function runTag(dbPath: string, slug: string, tag: string): string {
 
   try {
     brain.initialize();
-    const current = brain.tagsForPage(slug);
-    brain.replaceTags(slug, [...current, tag]);
+    brain.addTagToPage(slug, tag);
     return `Tagged ${slug} with ${tag}`;
   } finally {
     brain.close();
@@ -29,8 +28,7 @@ export function runUntag(dbPath: string, slug: string, tag: string): string {
 
   try {
     brain.initialize();
-    const current = brain.tagsForPage(slug).filter((entry) => entry !== tag);
-    brain.replaceTags(slug, current);
+    brain.removeTagFromPage(slug, tag);
     return `Removed ${tag} from ${slug}`;
   } finally {
     brain.close();
