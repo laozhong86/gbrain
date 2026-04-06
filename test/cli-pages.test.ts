@@ -58,8 +58,8 @@ Builds agent software.
     );
 
     const initResult = runCli(["init", "--db", dbPath]);
-    const putResult = runCli(["put", "river-ai", "--db", dbPath, pagePath]);
-    const getResult = runCli(["get", "river-ai", "--db", dbPath]);
+    const putResult = runCli(["put", "companies/river-ai", "--db", dbPath, pagePath]);
+    const getResult = runCli(["get", "companies/river-ai", "--db", dbPath]);
     const listResult = runCli(["list", "--db", dbPath]);
     const statsResult = runCli(["stats", "--db", dbPath]);
 
@@ -71,7 +71,7 @@ Builds agent software.
 
     expect(decode(getResult.stdout)).toContain("# River AI");
     expect(decode(getResult.stdout)).toContain("- **2026-04-05** | note");
-    expect(decode(listResult.stdout)).toContain("river-ai | company | River AI");
+    expect(decode(listResult.stdout)).toContain("companies/river-ai | company | River AI");
     expect(decode(statsResult.stdout)).toContain("Pages: 1");
   });
 
