@@ -7,23 +7,25 @@ export interface ParsedMarkdownDocument {
   timeline: string;
 }
 
+const TIMELINE_SPLIT_PATTERN = /\n---\n(?=\n*- \*\*\d{4}-\d{2}-\d{2}\*\*\s*\|)/;
+
 export function parseMarkdownDocument(source: string): ParsedMarkdownDocument {
   const parsed = matter(source);
-  const separator = /\n---\n/;
-  const matchIndex = parsed.content.search(separator);
+  const content = parsed.content.replace(/\r\n/g, "\n");
+  const matchIndex = content.search(TIMELINE_SPLIT_PATTERN);
 
   if (matchIndex === -1) {
     return {
       frontmatter: parsed.data,
-      compiledTruth: parsed.content.trim(),
+      compiledTruth: content.trim(),
       timeline: "",
     };
   }
 
   return {
     frontmatter: parsed.data,
-    compiledTruth: parsed.content.slice(0, matchIndex).trim(),
-    timeline: parsed.content.slice(matchIndex + 5).trim(),
+    compiledTruth: content.slice(0, matchIndex).trim(),
+    timeline: content.slice(matchIndex + 5).trim(),
   };
 }
 
