@@ -73,6 +73,14 @@ function normalizeTags(tags: string[]): string[] {
   return Array.from(new Set(tags.map((tag) => tag.trim()).filter((tag) => tag.length > 0)));
 }
 
+function normalizeRawDataJson(data: string): string {
+  try {
+    return JSON.stringify(JSON.parse(data));
+  } catch {
+    throw new Error("Raw data must be valid JSON");
+  }
+}
+
 function mapPageRow(row: PageRow): PageRecord {
   return {
     id: row.id,
@@ -442,7 +450,7 @@ export class BrainDatabase {
         continue;
       }
 
-      normalizedRecords.set(source, record.data);
+      normalizedRecords.set(source, normalizeRawDataJson(record.data));
     }
 
     this.db.transaction(() => {
@@ -462,6 +470,29 @@ export class BrainDatabase {
     })();
   }
 
+  upsertRawDataSource(slug: string, source: string, data: string): void {
+    const page = this.getPageBySlug(slug);
+    const normalizedSource = source.trim();
+
+    if (!page) {
+      throw new Error(`Page not found: ${slug}`);
+    }
+
+    if (normalizedSource.length === 0) {
+      return;
+    }
+
+    this.db
+      .query(
+        `INSERT INTO raw_data (page_id, source, data)
+         VALUES (?1, ?2, ?3)
+         ON CONFLICT(page_id, source) DO UPDATE SET
+           data = excluded.data,
+           fetched_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`,
+      )
+      .run(page.id, normalizedSource, normalizeRawDataJson(data));
+  }
+
   listRawData(): Array<{ slug: string; source: string; data: string }> {
     return this.db
       .query<{ slug: string; source: string; data: string }, []>(
@@ -471,6 +502,34 @@ export class BrainDatabase {
          ORDER BY pages.slug, raw_data.source`,
       )
       .all();
+  }
+
+  listRawDataForPage(slug: string, source?: string): RawDataRecord[] {
+    const page = this.getPageBySlug(slug);
+
+    if (!page) {
+      throw new Error(`Page not found: ${slug}`);
+    }
+
+    if (source) {
+      return this.db
+        .query<RawDataRecord, [number, string]>(
+          `SELECT source, data
+           FROM raw_data
+           WHERE page_id = ?1 AND source = ?2
+           ORDER BY source`,
+        )
+        .all(page.id, source);
+    }
+
+    return this.db
+      .query<RawDataRecord, [number]>(
+        `SELECT source, data
+         FROM raw_data
+         WHERE page_id = ?1
+         ORDER BY source`,
+      )
+      .all(page.id);
   }
 
   replaceEmbeddings(

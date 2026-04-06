@@ -66,4 +66,90 @@ describe("getToolDefinitions", () => {
       verifyBrain.close();
     }
   });
+
+  it("rejects invalid raw payloads before storage", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "gbrain-mcp-"));
+    cleanup.push(dir);
+    const dbPath = join(dir, "brain.db");
+    const brain = new BrainDatabase(dbPath);
+
+    try {
+      brain.initialize();
+      brain.upsertPage({
+        slug: "people/pedro-franceschi",
+        type: "person",
+        title: "Pedro Franceschi",
+        compiledTruth: "# Pedro Franceschi",
+        timeline: "",
+        frontmatter: JSON.stringify({ title: "Pedro Franceschi", type: "person" }),
+      });
+    } finally {
+      brain.close();
+    }
+
+    await expect(
+      callTool(dbPath, "brain_raw", {
+        slug: "people/pedro-franceschi",
+        source: "crustdata",
+        data: "not json",
+      }),
+    ).rejects.toThrow("Raw data must be valid JSON");
+
+    const verifyBrain = new BrainDatabase(dbPath);
+
+    try {
+      verifyBrain.initialize();
+      expect(
+        verifyBrain.listRawData().filter((record) => record.slug === "people/pedro-franceschi"),
+      ).toHaveLength(0);
+    } finally {
+      verifyBrain.close();
+    }
+  });
+
+  it("returns a clear error when reading raw data for a missing page", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "gbrain-mcp-"));
+    cleanup.push(dir);
+    const dbPath = join(dir, "brain.db");
+    const brain = new BrainDatabase(dbPath);
+
+    try {
+      brain.initialize();
+    } finally {
+      brain.close();
+    }
+
+    await expect(
+      callTool(dbPath, "brain_raw", {
+        slug: "people/missing",
+      }),
+    ).rejects.toThrow("Page not found: people/missing");
+  });
+
+  it("returns empty output when a page exists but has no raw data", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "gbrain-mcp-"));
+    cleanup.push(dir);
+    const dbPath = join(dir, "brain.db");
+    const brain = new BrainDatabase(dbPath);
+
+    try {
+      brain.initialize();
+      brain.upsertPage({
+        slug: "people/pedro-franceschi",
+        type: "person",
+        title: "Pedro Franceschi",
+        compiledTruth: "# Pedro Franceschi",
+        timeline: "",
+        frontmatter: JSON.stringify({ title: "Pedro Franceschi", type: "person" }),
+      });
+    } finally {
+      brain.close();
+    }
+
+    expect(
+      await callTool(dbPath, "brain_raw", {
+        slug: "people/pedro-franceschi",
+      }),
+    ).toBe("");
+  });
 });
