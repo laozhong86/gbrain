@@ -16,6 +16,7 @@ import { runServe } from "./commands/serve";
 import { runStats } from "./commands/stats";
 import { runTag, runTags, runUntag } from "./commands/tags";
 import { runTimelineAdd, runTimelineList } from "./commands/timeline";
+import { runUpgrade } from "./commands/upgrade";
 import { runVersion } from "./commands/version";
 import { createOpenAIEmbeddingProvider } from "./core/embeddings";
 import { isChunkStrategy } from "./core/markdown";
@@ -267,6 +268,9 @@ async function run(argv: string[]): Promise<string | undefined> {
       );
     case "version":
       return runVersion();
+    case "upgrade":
+    case "self-update":
+      return runUpgrade({ checkOnly: rest.includes("--check") });
     case "config":
       if (rest[0] === "set") {
         return runConfigSet(

@@ -257,6 +257,20 @@ bun run build
 cp bin/gbrain ~/.local/bin/gbrain
 ```
 
+如果你已经是通过编译后二进制安装，也可以直接：
+
+```bash
+gbrain upgrade --check
+gbrain upgrade
+```
+
+这条路径会从 GitHub Release 下载与你当前平台匹配的最新二进制并原地替换。
+
+注意两点：
+
+- 它要求你当前运行的是编译后的 `gbrain` 二进制
+- 它依赖仓库已经发布对应平台的 GitHub Release 资产
+
 ### 回滚
 
 最稳的回滚单元其实不是代码，而是：
