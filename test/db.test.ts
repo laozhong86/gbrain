@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
+import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -20,6 +21,30 @@ function createDatabase(): BrainDatabase {
   const brain = new BrainDatabase(dbPath);
   brain.initialize();
   return brain;
+}
+
+function createLegacyDatabase(): BrainDatabase {
+  const dir = mkdtempSync(join(tmpdir(), "gbrain-legacy-db-"));
+  cleanup.push(dir);
+  const dbPath = join(dir, "brain.db");
+  const legacy = new Database(dbPath, { create: true });
+
+  legacy.exec(`
+    CREATE TABLE pages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      slug TEXT NOT NULL UNIQUE,
+      type TEXT NOT NULL,
+      title TEXT NOT NULL,
+      compiled_truth TEXT NOT NULL DEFAULT '',
+      timeline TEXT NOT NULL DEFAULT '',
+      frontmatter TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    );
+  `);
+  legacy.close();
+
+  return new BrainDatabase(dbPath);
 }
 
 describe("BrainDatabase.initialize", () => {
@@ -50,6 +75,22 @@ describe("BrainDatabase.initialize", () => {
       .get();
 
     expect(configCount?.count).toBe(4);
+
+    brain.close();
+  });
+
+  it("upgrades a legacy pages table to reject invalid page types", () => {
+    const brain = createLegacyDatabase();
+
+    brain.initialize();
+
+    expect(() =>
+      brain.db
+        .query(
+          "INSERT INTO pages (slug, type, title, compiled_truth, timeline, frontmatter) VALUES (?, ?, ?, ?, ?, ?)",
+        )
+        .run("legacy-invalid-type", "unknown", "Bad Type", "", "", "{}"),
+    ).toThrow();
 
     brain.close();
   });
