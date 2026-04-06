@@ -1,0 +1,25 @@
+{
+  "name": "gbrain",
+  "version": "0.1.0",
+  "type": "module",
+  "private": false,
+  "bin": {
+    "gbrain": "./bin/gbrain"
+  },
+  "scripts": {
+    "dev": "bun run src/cli.ts",
+    "test": "bun test",
+    "build": "bun build --compile --outfile bin/gbrain src/cli.ts",
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "gray-matter": "^4.0.3",
+    "yaml": "^2.4.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "bun-types": "latest",
+    "typescript": "^5.8.0"
+  }
+}
