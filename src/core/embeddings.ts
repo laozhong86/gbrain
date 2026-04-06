@@ -13,6 +13,7 @@ export interface EmbeddingProvider {
 }
 
 export interface OpenAIEmbeddingProviderOptions {
+  baseUrl?: string;
   dimensions?: number;
   model?: string;
 }
@@ -21,23 +22,47 @@ export function createOpenAIEmbeddingProvider(
   apiKey: string,
   options: OpenAIEmbeddingProviderOptions = {},
 ): EmbeddingProvider {
-  if (!apiKey) {
-    throw new Error("OPENAI_API_KEY is required for embedding commands");
+  const fallbackApiKey = process.env.OPENAI_API_KEY || process.env.OPENROUTER_API_KEY || "";
+  const resolvedApiKey = apiKey || fallbackApiKey;
+
+  if (!resolvedApiKey) {
+    throw new Error(
+      "OPENAI_API_KEY or OPENROUTER_API_KEY is required for embedding commands",
+    );
   }
 
   const model = options.model ?? "text-embedding-3-small";
   const dimensions = options.dimensions ?? 1536;
+  const usesOpenRouter =
+    (!apiKey && !!process.env.OPENROUTER_API_KEY) ||
+    (!!process.env.OPENROUTER_API_KEY && !process.env.OPENAI_API_KEY);
+  const baseUrl =
+    options.baseUrl ??
+    process.env.EMBEDDING_BASE_URL ??
+    process.env.OPENAI_BASE_URL ??
+    (usesOpenRouter ? "https://openrouter.ai/api/v1" : "https://api.openai.com/v1");
 
   return {
     model,
     dimensions,
     async embed(text: string): Promise<number[]> {
-      const response = await fetch("https://api.openai.com/v1/embeddings", {
+      const headers: Record<string, string> = {
+        "content-type": "application/json",
+        authorization: `Bearer ${resolvedApiKey}`,
+      };
+
+      if (baseUrl.includes("openrouter.ai")) {
+        if (process.env.OPENROUTER_HTTP_REFERER) {
+          headers["HTTP-Referer"] = process.env.OPENROUTER_HTTP_REFERER;
+        }
+        if (process.env.OPENROUTER_X_TITLE) {
+          headers["X-Title"] = process.env.OPENROUTER_X_TITLE;
+        }
+      }
+
+      const response = await fetch(`${baseUrl.replace(/\/$/, "")}/embeddings`, {
         method: "POST",
-        headers: {
-          "content-type": "application/json",
-          authorization: `Bearer ${apiKey}`,
-        },
+        headers,
         body: JSON.stringify({
           model,
           dimensions,

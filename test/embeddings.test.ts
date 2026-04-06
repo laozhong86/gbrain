@@ -7,6 +7,7 @@ import { runEmbed } from "../src/commands/embed";
 import { runQuery } from "../src/commands/query";
 import {
   cosineSimilarity,
+  createOpenAIEmbeddingProvider,
   decodeEmbedding,
   encodeEmbedding,
   mergeHybridResults,
@@ -19,6 +20,12 @@ afterEach(() => {
   while (cleanup.length > 0) {
     rmSync(cleanup.pop()!, { recursive: true, force: true });
   }
+  delete process.env.OPENAI_API_KEY;
+  delete process.env.OPENROUTER_API_KEY;
+  delete process.env.OPENAI_BASE_URL;
+  delete process.env.EMBEDDING_BASE_URL;
+  delete process.env.OPENROUTER_HTTP_REFERER;
+  delete process.env.OPENROUTER_X_TITLE;
 });
 
 function createTempDir(prefix: string): string {
@@ -262,5 +269,81 @@ describe("embeddings", () => {
     expect(output).toContain("pages/chunked");
     expect(output).toContain("semantic needle appears here");
     expect(output).not.toContain("Boring intro.");
+  });
+
+  it("supports OpenRouter-compatible embedding requests", async () => {
+    process.env.OPENROUTER_API_KEY = "openrouter-test-key";
+    process.env.OPENROUTER_HTTP_REFERER = "https://example.com";
+    process.env.OPENROUTER_X_TITLE = "GBrain Test";
+
+    const originalFetch = globalThis.fetch;
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
+
+    globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+      requests.push({ url: String(url), init });
+
+      return new Response(
+        JSON.stringify({
+          data: [{ embedding: [0.1, 0.2] }],
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        },
+      );
+    }) as typeof fetch;
+
+    try {
+      const provider = createOpenAIEmbeddingProvider("", {
+        model: "openai/text-embedding-3-small",
+        dimensions: 2,
+      });
+      const embedding = await provider.embed("hello");
+
+      expect(embedding).toEqual([0.1, 0.2]);
+      expect(requests[0]?.url).toBe("https://openrouter.ai/api/v1/embeddings");
+      expect(requests[0]?.init?.headers).toMatchObject({
+        authorization: "Bearer openrouter-test-key",
+        "HTTP-Referer": "https://example.com",
+        "X-Title": "GBrain Test",
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("supports custom OpenAI-compatible embedding base URLs", async () => {
+    process.env.OPENAI_API_KEY = "openai-test-key";
+    process.env.OPENAI_BASE_URL = "https://openrouter.ai/api/v1";
+
+    const originalFetch = globalThis.fetch;
+    const requests: string[] = [];
+
+    globalThis.fetch = (async (url: string | URL | Request) => {
+      requests.push(String(url));
+
+      return new Response(
+        JSON.stringify({
+          data: [{ embedding: [0.3, 0.4] }],
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        },
+      );
+    }) as typeof fetch;
+
+    try {
+      const provider = createOpenAIEmbeddingProvider("", {
+        model: "text-embedding-3-small",
+        dimensions: 2,
+      });
+      const embedding = await provider.embed("hello");
+
+      expect(embedding).toEqual([0.3, 0.4]);
+      expect(requests).toEqual(["https://openrouter.ai/api/v1/embeddings"]);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 });
