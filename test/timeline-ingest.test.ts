@@ -83,6 +83,47 @@ Notes.
 
     await expect(runImport(dbPath, sourceDir, false)).resolves.toBe("Imported 1 pages");
     expect(runTimelineList(dbPath, "people/pedro-franceschi")).toBe("2026-04-05 | meeting | Met in SF");
+    expect(runGet(dbPath, "people/pedro-franceschi")).toContain("- **2026-04-05** | meeting — Met in SF\n");
+  });
+
+  it("keeps imported timeline markdown lossless with continuation lines and hyphen separators", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "gbrain-import-timeline-lossless-"));
+    dirs.push(dir);
+
+    const sourceDir = join(dir, "pages");
+    mkdirSync(join(sourceDir, "people"), { recursive: true });
+    const timelineMarkdown = [
+      "- **2026-04-05** | meeting - Met in SF",
+      "  Shared Brex update",
+      "",
+      "- **2026-03-01** | note - Sent follow-up",
+    ].join("\n");
+
+    writeFileSync(
+      join(sourceDir, "people", "pedro-franceschi.md"),
+      `---
+title: Pedro Franceschi
+type: person
+---
+
+# Pedro Franceschi
+
+Notes.
+
+---
+
+${timelineMarkdown}
+`,
+    );
+
+    const dbPath = join(dir, "brain.db");
+
+    await expect(runImport(dbPath, sourceDir, false)).resolves.toBe("Imported 1 pages");
+
+    expect(runTimelineList(dbPath, "people/pedro-franceschi")).toBe(
+      "2026-04-05 | meeting | Met in SF | Shared Brex update\n2026-03-01 | note | Sent follow-up",
+    );
+    expect(runGet(dbPath, "people/pedro-franceschi")).toContain(`${timelineMarkdown}\n`);
   });
 
   it("keeps markdown timeline order aligned when backfilling an older event", () => {
