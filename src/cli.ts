@@ -1,11 +1,14 @@
+import { runEmbed } from "./commands/embed";
 import { runBacklinks, runLink, runUnlink } from "./commands/link";
 import { runGet } from "./commands/get";
 import { runInit } from "./commands/init";
 import { runList } from "./commands/list";
 import { runPut } from "./commands/put";
+import { runQuery } from "./commands/query";
 import { runSearch } from "./commands/search";
 import { runStats } from "./commands/stats";
 import { runTag, runTags, runUntag } from "./commands/tags";
+import { createOpenAIEmbeddingProvider } from "./core/embeddings";
 
 function consumeDbFlag(argv: string[]): { args: string[]; dbPath: string } {
   const args = [...argv];
@@ -51,7 +54,7 @@ function consumeOption(argv: string[], flag: string): { args: string[]; value?: 
   return { args, value };
 }
 
-function run(argv: string[]): string {
+async function run(argv: string[]): Promise<string> {
   const db = consumeDbFlag(argv);
   const tag = consumeOption(db.args, "--tag");
   const [command, ...rest] = tag.args;
@@ -87,15 +90,32 @@ function run(argv: string[]): string {
     case "search":
       requireArg(rest[0], "query");
       return runSearch(db.dbPath, rest.join(" "));
+    case "embed":
+      return runEmbed(
+        db.dbPath,
+        rest[0] === "--all" ? undefined : rest[0],
+        createOpenAIEmbeddingProvider(process.env.OPENAI_API_KEY ?? ""),
+      );
+    case "query":
+      requireArg(rest[0], "question");
+      return runQuery(
+        db.dbPath,
+        rest.join(" "),
+        createOpenAIEmbeddingProvider(process.env.OPENAI_API_KEY ?? ""),
+      );
     default:
       throw new Error(`Unknown command: ${command ?? ""}`.trim());
   }
 }
 
-try {
-  console.log(run(Bun.argv.slice(2)));
-} catch (error) {
-  process.exitCode = 1;
-  const message = error instanceof Error ? error.message : String(error);
-  console.error(message);
+async function main(): Promise<void> {
+  try {
+    console.log(await run(Bun.argv.slice(2)));
+  } catch (error) {
+    process.exitCode = 1;
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(message);
+  }
 }
+
+await main();

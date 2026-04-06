@@ -1,5 +1,12 @@
 import { Database } from "bun:sqlite";
 import { readFileSync } from "node:fs";
+import {
+  cosineSimilarity,
+  decodeEmbedding,
+  encodeEmbedding,
+  type EmbeddingProvider,
+  type VectorSearchResult,
+} from "./embeddings";
 import type { ListPagesOptions, PageRecord, PageUpsertInput } from "./types";
 import { PAGE_TYPE_SQL_LIST } from "./types";
 
@@ -36,6 +43,11 @@ interface PageIdRow {
 interface LinkInput {
   targetSlug: string;
   context: string;
+}
+
+interface EmbeddingRow {
+  slug: string;
+  embedding: Uint8Array | ArrayBuffer;
 }
 
 function normalizeTags(tags: string[]): string[] {
@@ -276,6 +288,61 @@ export class BrainDatabase {
       .get(slug);
 
     return row ? mapPageRow(row) : null;
+  }
+
+  replaceEmbeddings(slug: string, chunks: Array<{ chunkText: string; values: number[] }>): void {
+    const page = this.getPageBySlug(slug);
+
+    if (!page) {
+      throw new Error(`Page not found: ${slug}`);
+    }
+
+    this.db.transaction(() => {
+      this.db.query("DELETE FROM page_embeddings WHERE page_id = ?1").run(page.id);
+
+      const insertEmbedding = this.db.query(
+        `INSERT INTO page_embeddings (page_id, chunk_index, chunk_text, embedding, model)
+         VALUES (?1, ?2, ?3, ?4, ?5)`,
+      );
+
+      for (const [chunkIndex, chunk] of chunks.entries()) {
+        insertEmbedding.run(
+          page.id,
+          chunkIndex,
+          chunk.chunkText,
+          encodeEmbedding(chunk.values),
+          "text-embedding-3-small",
+        );
+      }
+    })();
+  }
+
+  async searchSemantic(
+    question: string,
+    provider: EmbeddingProvider,
+    limit = 10,
+  ): Promise<VectorSearchResult[]> {
+    const normalizedLimit = Number.isInteger(limit) && limit > 0 ? limit : 10;
+    const queryEmbedding = await provider.embed(question);
+    const rows = this.db
+      .query<EmbeddingRow, []>(
+        `SELECT pages.slug, page_embeddings.embedding
+         FROM page_embeddings
+         INNER JOIN pages ON pages.id = page_embeddings.page_id`,
+      )
+      .all();
+    const bestBySlug = new Map<string, number>();
+
+    for (const row of rows) {
+      const bytes = row.embedding instanceof Uint8Array ? row.embedding : new Uint8Array(row.embedding);
+      const score = cosineSimilarity(queryEmbedding, decodeEmbedding(bytes));
+      bestBySlug.set(row.slug, Math.max(bestBySlug.get(row.slug) ?? Number.NEGATIVE_INFINITY, score));
+    }
+
+    return [...bestBySlug.entries()]
+      .map(([slug, score]) => ({ slug, score }))
+      .sort((left, right) => right.score - left.score)
+      .slice(0, normalizedLimit);
   }
 
   listPages(options: ListPagesOptions = {}): PageRecord[] {
