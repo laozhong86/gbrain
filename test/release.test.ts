@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 
 describe("release surface", () => {
   it("ships docs, skills, and a buildable binary", () => {
+    expect(existsSync("LICENSE")).toBe(true);
     expect(existsSync("README.md")).toBe(true);
     expect(existsSync("CLAUDE.md")).toBe(true);
     expect(existsSync("skills/ingest/SKILL.md")).toBe(true);

@@ -269,3 +269,19 @@ bun run build
 
 - [DEPLOYMENT.md](/Users/x/Desktop/Project/GBrain/DEPLOYMENT.md)
 - [CLAUDE.md](/Users/x/Desktop/Project/GBrain/CLAUDE.md)
+
+## License
+
+MIT
+
+See [LICENSE](/Users/x/Desktop/Project/GBrain/LICENSE).
+
+## Credits
+
+**Original GBrain spec and architecture** — [Garry Tan](https://github.com/garrytan)
+
+The core ideas come from the GBrain spec: compiled truth + timeline, thin CLI + fat skills, and MCP-native local memory.
+
+**Repository implementation and packaging** — [laozhong86](https://github.com/laozhong86)
+
+This repository turns that spec into a working local CLI, MCP server, release workflow, and operator-facing skill pack.
