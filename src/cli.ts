@@ -208,13 +208,15 @@ async function run(argv: string[]): Promise<string | undefined> {
         limit: limitArgs.value ? parsePositiveInteger(limitArgs.value, "--limit") : undefined,
       });
     }
-    case "link":
+    case "link": {
+      const contextArgs = consumeOption(rest.slice(2), "--context");
       return runLink(
         db.dbPath,
         requireArg(rest[0], "from"),
         requireArg(rest[1], "to"),
-        rest[2] ?? "",
+        contextArgs.value ?? "",
       );
+    }
     case "unlink":
       return runUnlink(db.dbPath, requireArg(rest[0], "from"), requireArg(rest[1], "to"));
     case "backlinks":

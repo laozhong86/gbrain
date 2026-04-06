@@ -22,6 +22,15 @@ function createDatabasePath(): string {
   return join(dir, "brain.db");
 }
 
+function runCli(args: string[]) {
+  return Bun.spawnSync(["bun", "run", "src/cli.ts", ...args], {
+    cwd: process.cwd(),
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+}
+
 function seedPage(dbPath: string, slug: string, title: string, type = "concept"): void {
   runPutFromSource(
     dbPath,
@@ -73,6 +82,44 @@ describe("links", () => {
       "Unlinked people/ali-partovi -> companies/river-ai",
     );
     expect(runBacklinks(dbPath, "companies/river-ai")).toBe("");
+  });
+
+  it("parses --context for the CLI link command and stores the context value", () => {
+    const dbPath = createDatabasePath();
+
+    seedPage(dbPath, "people/ali-partovi", "Ali Partovi", "person");
+    seedPage(dbPath, "companies/river-ai", "River AI", "company");
+
+    const result = runCli([
+      "link",
+      "people/ali-partovi",
+      "companies/river-ai",
+      "--context",
+      "founder",
+      "--db",
+      dbPath,
+    ]);
+
+    expect(result.exitCode).toBe(0);
+
+    const brain = new BrainDatabase(dbPath);
+
+    try {
+      brain.initialize();
+      const link = brain.db
+        .query<{ context: string }, []>(
+          `SELECT links.context
+           FROM links
+           INNER JOIN pages AS from_pages ON from_pages.id = links.from_page_id
+           INNER JOIN pages AS to_pages ON to_pages.id = links.to_page_id
+           WHERE from_pages.slug = 'people/ali-partovi' AND to_pages.slug = 'companies/river-ai'`,
+        )
+        .get();
+
+      expect(link?.context).toBe("founder");
+    } finally {
+      brain.close();
+    }
   });
 
   it("lists, adds, and removes tags without regressing stored tags", () => {
