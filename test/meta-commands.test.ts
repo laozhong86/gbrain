@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import pkg from "../package.json";
@@ -92,5 +92,60 @@ describe("meta commands", () => {
       ok: false,
       error: "Pipe request input must be a JSON object",
     });
+  });
+
+  it("supports the documented CLI flag contracts", () => {
+    const dir = createTempDir();
+    const dbPath = join(dir, "custom.db");
+    const exportDir = join(dir, "out");
+    const ingestPath = join(dir, "meeting.txt");
+    writeFileSync(ingestPath, "Customer call notes");
+
+    expect(runCli(["init", dbPath]).exitCode).toBe(0);
+
+    const putResult = runCli(
+      ["put", "people/pedro-franceschi", "--db", dbPath],
+      `---
+title: Pedro Franceschi
+type: person
+tags:
+  - founder
+---
+
+# Pedro Franceschi
+`,
+    );
+    const listResult = runCli(["list", "--type", "person", "--limit", "1", "--db", dbPath]);
+    const timelineAddResult = runCli(
+      [
+        "timeline-add",
+        "people/pedro-franceschi",
+        "--date",
+        "2026-04-05",
+        "--summary",
+        "Met in SF",
+        "--source",
+        "meeting",
+        "--detail",
+        "Shared Brex update",
+        "--db",
+        dbPath,
+      ],
+    );
+    const timelineResult = runCli(["timeline", "people/pedro-franceschi", "--db", dbPath]);
+    const ingestResult = runCli(["ingest", ingestPath, "--type", "meeting", "--db", dbPath]);
+    const exportResult = runCli(["export", "--dir", exportDir, "--db", dbPath]);
+
+    expect(putResult.exitCode).toBe(0);
+    expect(listResult.exitCode).toBe(0);
+    expect(timelineAddResult.exitCode).toBe(0);
+    expect(timelineResult.exitCode).toBe(0);
+    expect(ingestResult.exitCode).toBe(0);
+    expect(exportResult.exitCode).toBe(0);
+    expect(decode(listResult.stdout).trim()).toBe("people/pedro-franceschi | person | Pedro Franceschi");
+    expect(decode(timelineResult.stdout)).toContain("2026-04-05 | meeting | Met in SF | Shared Brex update");
+    expect(decode(ingestResult.stdout)).toContain(`Ingested ${ingestPath}`);
+    expect(existsSync(join(exportDir, "people", "pedro-franceschi.md"))).toBe(true);
+    expect(readFileSync(join(exportDir, "log.md"), "utf8")).toContain("Ingested");
   });
 });

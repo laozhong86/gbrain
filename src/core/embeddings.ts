@@ -12,14 +12,25 @@ export interface EmbeddingProvider {
   embed(text: string): Promise<number[]>;
 }
 
-export function createOpenAIEmbeddingProvider(apiKey: string): EmbeddingProvider {
+export interface OpenAIEmbeddingProviderOptions {
+  dimensions?: number;
+  model?: string;
+}
+
+export function createOpenAIEmbeddingProvider(
+  apiKey: string,
+  options: OpenAIEmbeddingProviderOptions = {},
+): EmbeddingProvider {
   if (!apiKey) {
     throw new Error("OPENAI_API_KEY is required for embedding commands");
   }
 
+  const model = options.model ?? "text-embedding-3-small";
+  const dimensions = options.dimensions ?? 1536;
+
   return {
-    model: "text-embedding-3-small",
-    dimensions: 1536,
+    model,
+    dimensions,
     async embed(text: string): Promise<number[]> {
       const response = await fetch("https://api.openai.com/v1/embeddings", {
         method: "POST",
@@ -28,7 +39,8 @@ export function createOpenAIEmbeddingProvider(apiKey: string): EmbeddingProvider
           authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          model: "text-embedding-3-small",
+          model,
+          dimensions,
           input: text,
         }),
       });

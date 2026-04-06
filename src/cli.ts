@@ -9,7 +9,7 @@ import { runGet } from "./commands/get";
 import { runInit } from "./commands/init";
 import { runImport } from "./commands/import";
 import { runList } from "./commands/list";
-import { runPut } from "./commands/put";
+import { runPut, runPutFromSource } from "./commands/put";
 import { runQuery } from "./commands/query";
 import { runSearch } from "./commands/search";
 import { runServe } from "./commands/serve";
@@ -18,6 +18,8 @@ import { runTag, runTags, runUntag } from "./commands/tags";
 import { runTimelineAdd, runTimelineList } from "./commands/timeline";
 import { runVersion } from "./commands/version";
 import { createOpenAIEmbeddingProvider } from "./core/embeddings";
+import { isChunkStrategy } from "./core/markdown";
+import { BrainDatabase } from "./core/db";
 import { getToolDefinitions } from "./mcp/server";
 
 function consumeDbFlag(argv: string[]): { args: string[]; dbPath: string } {
@@ -66,6 +68,56 @@ function consumeOption(argv: string[], flag: string): { args: string[]; value?: 
 
 function getToolsJson(): string {
   return JSON.stringify({ tools: getToolDefinitions() });
+}
+
+function parsePositiveInteger(value: string, name: string): number {
+  const parsed = Number.parseInt(value, 10);
+
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new Error(`${name} must be a positive integer`);
+  }
+
+  return parsed;
+}
+
+async function readStdinText(): Promise<string> {
+  if (process.stdin.isTTY) {
+    throw new Error("Missing page content: provide a file path or pipe markdown via stdin");
+  }
+
+  const chunks: Uint8Array[] = [];
+
+  for await (const chunk of process.stdin) {
+    chunks.push(typeof chunk === "string" ? new TextEncoder().encode(chunk) : chunk);
+  }
+
+  return new TextDecoder().decode(Buffer.concat(chunks));
+}
+
+function loadEmbeddingRuntimeConfig(dbPath: string): {
+  chunkStrategy: string;
+  dimensions: number;
+  model: string;
+} {
+  const brain = new BrainDatabase(dbPath);
+
+  try {
+    brain.initialize();
+    const model = brain.getConfig("embedding_model") ?? "text-embedding-3-small";
+    const dimensions = parsePositiveInteger(
+      brain.getConfig("embedding_dimensions") ?? "1536",
+      "embedding_dimensions",
+    );
+    const chunkStrategy = brain.getConfig("chunk_strategy") ?? "section";
+
+    if (!isChunkStrategy(chunkStrategy)) {
+      throw new Error(`Unsupported chunk strategy: ${chunkStrategy}`);
+    }
+
+    return { model, dimensions, chunkStrategy };
+  } finally {
+    brain.close();
+  }
 }
 
 async function runPipe(dbPath: string): Promise<void> {
@@ -130,21 +182,32 @@ async function run(argv: string[]): Promise<string | undefined> {
 
   switch (command) {
     case "init":
-      return runInit(db.dbPath);
+      return runInit(rest[0] ?? db.dbPath);
     case "get":
       return runGet(db.dbPath, requireArg(rest[0], "slug"));
     case "put":
-      return runPut(db.dbPath, requireArg(rest[0], "slug"), requireArg(rest[1], "file"));
+      return rest[1]
+        ? runPut(db.dbPath, requireArg(rest[0], "slug"), rest[1])
+        : runPutFromSource(db.dbPath, requireArg(rest[0], "slug"), await readStdinText());
     case "import":
       return runImport(
         db.dbPath,
         requireArg(rest[0], "sourceDir"),
         rest.includes("--with-embeddings"),
       );
-    case "export":
-      return runExport(db.dbPath, rest[0] ?? "export");
-    case "list":
-      return runList(db.dbPath, tag.value);
+    case "export": {
+      const exportArgs = consumeOption(rest, "--dir");
+      return runExport(db.dbPath, exportArgs.value ?? exportArgs.args[0] ?? "export");
+    }
+    case "list": {
+      const typeArgs = consumeOption(rest, "--type");
+      const limitArgs = consumeOption(typeArgs.args, "--limit");
+      return runList(db.dbPath, {
+        tag: tag.value,
+        type: typeArgs.value,
+        limit: limitArgs.value ? parsePositiveInteger(limitArgs.value, "--limit") : undefined,
+      });
+    }
     case "link":
       return runLink(
         db.dbPath,
@@ -167,19 +230,30 @@ async function run(argv: string[]): Promise<string | undefined> {
     case "search":
       requireArg(rest[0], "query");
       return runSearch(db.dbPath, rest.join(" "));
-    case "embed":
+    case "embed": {
+      const runtimeConfig = loadEmbeddingRuntimeConfig(db.dbPath);
       return runEmbed(
         db.dbPath,
         rest[0] === "--all" ? undefined : rest[0],
-        createOpenAIEmbeddingProvider(process.env.OPENAI_API_KEY ?? ""),
+        createOpenAIEmbeddingProvider(process.env.OPENAI_API_KEY ?? "", {
+          model: runtimeConfig.model,
+          dimensions: runtimeConfig.dimensions,
+        }),
+        runtimeConfig.chunkStrategy,
       );
-    case "query":
+    }
+    case "query": {
       requireArg(rest[0], "question");
+      const runtimeConfig = loadEmbeddingRuntimeConfig(db.dbPath);
       return runQuery(
         db.dbPath,
         rest.join(" "),
-        createOpenAIEmbeddingProvider(process.env.OPENAI_API_KEY ?? ""),
+        createOpenAIEmbeddingProvider(process.env.OPENAI_API_KEY ?? "", {
+          model: runtimeConfig.model,
+          dimensions: runtimeConfig.dimensions,
+        }),
       );
+    }
     case "serve":
       await runServe(db.dbPath);
       return undefined;
@@ -206,17 +280,26 @@ async function run(argv: string[]): Promise<string | undefined> {
       return undefined;
     case "timeline":
       return runTimelineList(db.dbPath, requireArg(rest[0], "slug"));
-    case "timeline-add":
+    case "timeline-add": {
+      const dateArgs = consumeOption(rest.slice(1), "--date");
+      const summaryArgs = consumeOption(dateArgs.args, "--summary");
+      const sourceArgs = consumeOption(summaryArgs.args, "--source");
+      const detailArgs = consumeOption(sourceArgs.args, "--detail");
       return runTimelineAdd(
         db.dbPath,
         requireArg(rest[0], "slug"),
-        requireArg(rest[1], "date"),
-        requireArg(rest[2], "source"),
-        requireArg(rest[3], "summary"),
-        rest[4] ?? "",
+        {
+          date: requireArg(dateArgs.value, "date"),
+          summary: requireArg(summaryArgs.value, "summary"),
+          source: sourceArgs.value,
+          detail: detailArgs.value,
+        },
       );
-    case "ingest":
-      return runIngest(db.dbPath, requireArg(rest[0], "file"), rest[1] ?? "doc");
+    }
+    case "ingest": {
+      const ingestArgs = consumeOption(rest.slice(1), "--type");
+      return runIngest(db.dbPath, requireArg(rest[0], "file"), ingestArgs.value ?? "doc");
+    }
     default:
       throw new Error(`Unknown command: ${command ?? ""}`.trim());
   }

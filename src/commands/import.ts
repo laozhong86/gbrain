@@ -3,7 +3,7 @@ import { join, relative } from "node:path";
 import { BrainDatabase } from "../core/db";
 import { extractWikiLinks, normalizeWikiTarget, slugToMarkdownPath } from "../core/links";
 import { parseMarkdownDocument } from "../core/markdown";
-import { PAGE_TYPES, type PageType } from "../core/types";
+import { isPageType, type PageType } from "../core/types";
 
 const SKIPPED_MARKDOWN_FILES = new Set(["schema.md", "index.md", "log.md", "README.md"]);
 
@@ -45,8 +45,8 @@ function scanMarkdownFiles(rootDir: string): string[] {
 }
 
 function extractPageType(slug: string, value: unknown): PageType {
-  if (typeof value === "string" && PAGE_TYPES.includes(value as PageType)) {
-    return value as PageType;
+  if (typeof value === "string" && isPageType(value)) {
+    return value;
   }
 
   const topLevelDir = slug.split("/")[0];
@@ -57,6 +57,27 @@ function extractPageType(slug: string, value: unknown): PageType {
   }
 
   return fallbackType;
+}
+
+function readOptionalSpecialFile(sourceDir: string, fileName: string): string | null {
+  try {
+    return readFileSync(join(sourceDir, fileName), "utf8");
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      return null;
+    }
+
+    throw error;
+  }
+}
+
+function parseLogSummaries(source: string): string[] {
+  return source
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .map((line) => (line.startsWith("- ") ? line.slice(2).trim() : line));
 }
 
 function extractTitle(slug: string, value: unknown): string {
@@ -124,6 +145,11 @@ export async function runImport(
     brain.initialize();
 
     const files = scanMarkdownFiles(sourceDir);
+    const specialFiles = {
+      index: readOptionalSpecialFile(sourceDir, "index.md"),
+      log: readOptionalSpecialFile(sourceDir, "log.md"),
+      schema: readOptionalSpecialFile(sourceDir, "schema.md"),
+    };
     const importedPages = files.map((filePath) => ({
       filePath,
       slug: normalizeWikiTarget(relative(sourceDir, filePath).replace(/\\/g, "/")),
@@ -158,6 +184,26 @@ export async function runImport(
 
       for (const importedPage of importedPages) {
         brain.replaceOutgoingLinks(importedPage.slug, linksBySlug.get(importedPage.slug) ?? []);
+      }
+
+      if (specialFiles.index === null) {
+        brain.deleteConfig("original_index");
+      } else {
+        brain.setConfig("original_index", specialFiles.index);
+      }
+
+      if (specialFiles.schema === null) {
+        brain.deleteConfig("original_schema");
+      } else {
+        brain.setConfig("original_schema", specialFiles.schema);
+      }
+
+      if (specialFiles.log === null) {
+        brain.deleteConfig("original_log");
+        brain.replaceImportedLog("log.md", []);
+      } else {
+        brain.setConfig("original_log", specialFiles.log);
+        brain.replaceImportedLog("log.md", parseLogSummaries(specialFiles.log));
       }
     });
 

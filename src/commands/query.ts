@@ -6,15 +6,17 @@ export async function runQuery(
   dbPath: string,
   question: string,
   provider: EmbeddingProvider,
+  limit = 10,
 ): Promise<string> {
   const brain = new BrainDatabase(dbPath);
 
   try {
     brain.initialize();
 
-    const ftsResults = searchFTS(brain.db, question, 10);
-    const vectorResults = await brain.searchSemantic(question, provider, 10);
-    const merged = mergeHybridResults(ftsResults, vectorResults).slice(0, 10);
+    const normalizedLimit = Number.isInteger(limit) && limit > 0 ? limit : 10;
+    const ftsResults = searchFTS(brain.db, question, { limit: normalizedLimit });
+    const vectorResults = await brain.searchSemantic(question, provider, normalizedLimit);
+    const merged = mergeHybridResults(ftsResults, vectorResults).slice(0, normalizedLimit);
     const vectorResultsBySlug = new Map(vectorResults.map((result) => [result.slug, result]));
     const ftsResultsBySlug = new Map(ftsResults.map((result) => [result.slug, result]));
 

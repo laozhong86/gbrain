@@ -1,7 +1,8 @@
 import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { runGet } from "../commands/get";
-import { runBacklinks } from "../commands/link";
+import { runIngestContent } from "../commands/ingest";
+import { runBacklinks, runLink } from "../commands/link";
 import { runList } from "../commands/list";
 import { runPutFromSource } from "../commands/put";
 import { runQuery } from "../commands/query";
@@ -11,10 +12,14 @@ import { runTag, runTags, runUntag } from "../commands/tags";
 import { runTimelineAdd, runTimelineList } from "../commands/timeline";
 import { BrainDatabase } from "../core/db";
 import { createOpenAIEmbeddingProvider } from "../core/embeddings";
+import { renderMarkdownDocument, parseStoredFrontmatter } from "../core/markdown";
+import { PAGE_TYPES } from "../core/types";
 
 const toolDefinitions = [
   { name: "brain_get", description: "Read a page by slug" },
   { name: "brain_put", description: "Write or update a page from markdown" },
+  { name: "brain_ingest", description: "Ingest a source document" },
+  { name: "brain_link", description: "Create a cross-reference between pages" },
   { name: "brain_search", description: "Run lexical search over indexed pages" },
   { name: "brain_query", description: "Run hybrid semantic search" },
   { name: "brain_timeline", description: "Read timeline entries for a page" },
@@ -33,19 +38,45 @@ const getInputSchema = z.object({
 
 const putInputSchema = z.object({
   slug: z.string(),
+  content: z.string().optional(),
+  compiled_truth: z.string().optional(),
+  timeline_append: z.string().optional(),
+  frontmatter: z.record(z.unknown()).optional(),
+}).refine(
+  (input) =>
+    input.content !== undefined ||
+    input.compiled_truth !== undefined ||
+    input.timeline_append !== undefined ||
+    input.frontmatter !== undefined,
+  { message: "brain_put requires content or structured page fields" },
+);
+
+const ingestInputSchema = z.object({
   content: z.string(),
+  source_ref: z.string(),
+  source_type: z.string(),
+});
+
+const linkInputSchema = z.object({
+  from: z.string(),
+  to: z.string(),
+  context: z.string().optional(),
 });
 
 const searchInputSchema = z.object({
   query: z.string(),
+  type: z.enum(PAGE_TYPES).optional(),
+  limit: z.number().int().positive().optional(),
 });
 
 const queryInputSchema = z.object({
   question: z.string(),
+  limit: z.number().int().positive().optional(),
 });
 
 const timelineInputSchema = z.object({
   slug: z.string(),
+  limit: z.number().int().positive().optional(),
 });
 
 const timelineAddInputSchema = z.object({
@@ -68,6 +99,8 @@ const tagInputSchema = z.object({
 
 const listInputSchema = z.object({
   tag: z.string().optional(),
+  type: z.enum(PAGE_TYPES).optional(),
+  limit: z.number().int().positive().optional(),
 });
 
 const backlinksInputSchema = z.object({
@@ -77,11 +110,60 @@ const backlinksInputSchema = z.object({
 const rawInputSchema = z.object({
   slug: z.string(),
   source: z.string().optional(),
-  data: z.string().optional(),
+  data: z.union([z.record(z.unknown()), z.string()]).optional(),
 });
 
-function createProvider() {
-  return createOpenAIEmbeddingProvider(process.env.OPENAI_API_KEY ?? "");
+function createProvider(dbPath: string) {
+  const brain = new BrainDatabase(dbPath);
+
+  try {
+    brain.initialize();
+    const model = brain.getConfig("embedding_model") ?? "text-embedding-3-small";
+    const dimensions = Number.parseInt(brain.getConfig("embedding_dimensions") ?? "1536", 10);
+
+    if (!Number.isInteger(dimensions) || dimensions <= 0) {
+      throw new Error("embedding_dimensions must be a positive integer");
+    }
+
+    return createOpenAIEmbeddingProvider(process.env.OPENAI_API_KEY ?? "", {
+      model,
+      dimensions,
+    });
+  } finally {
+    brain.close();
+  }
+}
+
+function buildStructuredPutSource(
+  dbPath: string,
+  input: z.infer<typeof putInputSchema>,
+): string {
+  if (input.content !== undefined) {
+    return input.content;
+  }
+
+  const brain = new BrainDatabase(dbPath);
+
+  try {
+    brain.initialize();
+    const page = brain.getPageBySlug(input.slug);
+    const frontmatter = {
+      ...(page ? parseStoredFrontmatter(input.slug, page.frontmatter) : {}),
+      ...(input.frontmatter ?? {}),
+    };
+    const compiledTruth = input.compiled_truth ?? page?.compiledTruth ?? "";
+    const timeline = [page?.timeline.trim() ?? "", input.timeline_append?.trim() ?? ""]
+      .filter((value) => value.length > 0)
+      .join("\n");
+
+    return renderMarkdownDocument({
+      frontmatter,
+      compiledTruth,
+      timeline,
+    });
+  } finally {
+    brain.close();
+  }
 }
 
 function formatRawRecords(records: Array<{ source: string; data: string }>): string {
@@ -98,7 +180,11 @@ async function callRawTool(
     brain.initialize();
 
     if (input.source !== undefined && input.data !== undefined) {
-      brain.upsertRawDataSource(input.slug, input.source, input.data);
+      brain.upsertRawDataSource(
+        input.slug,
+        input.source,
+        typeof input.data === "string" ? input.data : JSON.stringify(input.data),
+      );
       return `Stored raw data for ${input.slug}/${input.source}`;
     }
 
@@ -126,23 +212,40 @@ export async function callTool(
     }
     case "brain_put": {
       const input = putInputSchema.parse(args);
-      return runPutFromSource(dbPath, input.slug, input.content);
+      return runPutFromSource(dbPath, input.slug, buildStructuredPutSource(dbPath, input));
+    }
+    case "brain_ingest": {
+      const input = ingestInputSchema.parse(args);
+      return runIngestContent(dbPath, {
+        content: input.content,
+        sourceRef: input.source_ref,
+        sourceType: input.source_type,
+      });
+    }
+    case "brain_link": {
+      const input = linkInputSchema.parse(args);
+      return runLink(dbPath, input.from, input.to, input.context ?? "");
     }
     case "brain_search": {
       const input = searchInputSchema.parse(args);
-      return runSearch(dbPath, input.query);
+      return runSearch(dbPath, input.query, { type: input.type, limit: input.limit });
     }
     case "brain_query": {
       const input = queryInputSchema.parse(args);
-      return runQuery(dbPath, input.question, createProvider());
+      return runQuery(dbPath, input.question, createProvider(dbPath), input.limit);
     }
     case "brain_timeline": {
       const input = timelineInputSchema.parse(args);
-      return runTimelineList(dbPath, input.slug);
+      return runTimelineList(dbPath, input.slug, input.limit);
     }
     case "brain_timeline_add": {
       const input = timelineAddInputSchema.parse(args);
-      return runTimelineAdd(dbPath, input.slug, input.date, input.source, input.summary, input.detail);
+      return runTimelineAdd(dbPath, input.slug, {
+        date: input.date,
+        source: input.source,
+        summary: input.summary,
+        detail: input.detail,
+      });
     }
     case "brain_tags": {
       const input = tagsInputSchema.parse(args);
@@ -154,7 +257,7 @@ export async function callTool(
     }
     case "brain_list": {
       const input = listInputSchema.parse(args);
-      return runList(dbPath, input.tag);
+      return runList(dbPath, { tag: input.tag, type: input.type, limit: input.limit });
     }
     case "brain_backlinks": {
       const input = backlinksInputSchema.parse(args);
@@ -186,6 +289,20 @@ export async function buildServer(dbPath: string): Promise<McpServer> {
     inputSchema: putInputSchema,
   }, async (args) => ({
     content: [{ type: "text", text: await callTool(dbPath, "brain_put", args) }],
+  }));
+
+  server.registerTool("brain_ingest", {
+    description: "Ingest a source document",
+    inputSchema: ingestInputSchema,
+  }, async (args) => ({
+    content: [{ type: "text", text: await callTool(dbPath, "brain_ingest", args) }],
+  }));
+
+  server.registerTool("brain_link", {
+    description: "Create a cross-reference between pages",
+    inputSchema: linkInputSchema,
+  }, async (args) => ({
+    content: [{ type: "text", text: await callTool(dbPath, "brain_link", args) }],
   }));
 
   server.registerTool("brain_search", {

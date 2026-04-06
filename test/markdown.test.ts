@@ -51,6 +51,13 @@ describe("parseMarkdownDocument", () => {
     expect(chunks[0]).toContain("# Pedro Franceschi");
   });
 
+  it("supports page and paragraph chunk strategies", () => {
+    const parsed = parseMarkdownDocument(source);
+
+    expect(chunkPageContent(parsed.compiledTruth, parsed.timeline, "page")).toHaveLength(1);
+    expect(chunkPageContent(parsed.compiledTruth, parsed.timeline, "paragraph").length).toBeGreaterThan(1);
+  });
+
   it("keeps ordinary body horizontal rules inside compiled truth", () => {
     const parsed = parseMarkdownDocument(`---
 title: Body Rule

@@ -49,6 +49,14 @@ interface RawDataRecord {
   data: string;
 }
 
+interface IngestLogRow {
+  source_type: string;
+  source_ref: string;
+  pages_updated: string;
+  summary: string;
+  timestamp: string;
+}
+
 interface EmbeddingRow {
   slug: string;
   chunk_text: string;
@@ -258,6 +266,10 @@ export class BrainDatabase {
       .run(key, value);
   }
 
+  deleteConfig(key: string): void {
+    this.db.query("DELETE FROM config WHERE key = ?1").run(key);
+  }
+
   addTagToPage(slug: string, tag: string): void {
     const page = this.db.query<PageIdRow, [string]>("SELECT id FROM pages WHERE slug = ?1").get(slug);
     const normalizedTag = normalizeTags([tag])[0];
@@ -439,6 +451,21 @@ export class BrainDatabase {
          VALUES (?1, ?2, ?3, ?4)`,
       )
       .run(sourceType, sourceRef, JSON.stringify(pagesUpdated), summary);
+  }
+
+  replaceImportedLog(sourceRef: string, summaries: string[]): void {
+    this.db
+      .query("DELETE FROM ingest_log WHERE source_type = 'import' AND source_ref = ?1")
+      .run(sourceRef);
+
+    const insertLog = this.db.query(
+      `INSERT INTO ingest_log (source_type, source_ref, pages_updated, summary)
+       VALUES ('import', ?1, '[]', ?2)`,
+    );
+
+    for (const summary of summaries) {
+      insertLog.run(sourceRef, summary);
+    }
   }
 
   deletePagesNotIn(slugs: string[]): void {
@@ -676,6 +703,29 @@ export class BrainDatabase {
   stats(): { pages: number } {
     const row = this.db.query<{ count: number }, []>("SELECT COUNT(*) AS count FROM pages").get();
     return { pages: row?.count ?? 0 };
+  }
+
+  listIngestLog(): Array<{
+    sourceType: string;
+    sourceRef: string;
+    pagesUpdated: string;
+    summary: string;
+    timestamp: string;
+  }> {
+    return this.db
+      .query<IngestLogRow, []>(
+        `SELECT source_type, source_ref, pages_updated, summary, timestamp
+         FROM ingest_log
+         ORDER BY timestamp ASC, id ASC`,
+      )
+      .all()
+      .map((row) => ({
+        sourceType: row.source_type,
+        sourceRef: row.source_ref,
+        pagesUpdated: row.pages_updated,
+        summary: row.summary,
+        timestamp: row.timestamp,
+      }));
   }
 
   private listStoredTimelineEntries(pageId: number): StoredTimelineEntryRow[] {

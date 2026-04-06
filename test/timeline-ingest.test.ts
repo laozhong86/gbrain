@@ -42,10 +42,12 @@ describe("timeline commands", () => {
       runTimelineAdd(
         dbPath,
         "people/pedro-franceschi",
-        "2026-04-05",
-        "meeting",
-        "Met in SF",
-        "Shared Brex update",
+        {
+          date: "2026-04-05",
+          source: "meeting",
+          summary: "Met in SF",
+          detail: "Shared Brex update",
+        },
       ),
     ).toBe("Added timeline entry to people/pedro-franceschi");
 
@@ -147,8 +149,16 @@ ${timelineMarkdown}
       brain.close();
     }
 
-    runTimelineAdd(dbPath, "people/pedro-franceschi", "2026-04-05", "meeting", "Newer event");
-    runTimelineAdd(dbPath, "people/pedro-franceschi", "2026-03-01", "note", "Older event");
+    runTimelineAdd(dbPath, "people/pedro-franceschi", {
+      date: "2026-04-05",
+      source: "meeting",
+      summary: "Newer event",
+    });
+    runTimelineAdd(dbPath, "people/pedro-franceschi", {
+      date: "2026-03-01",
+      source: "note",
+      summary: "Older event",
+    });
 
     const timelineOutput = runTimelineList(dbPath, "people/pedro-franceschi").split("\n");
     const markdownOutput = runGet(dbPath, "people/pedro-franceschi");

@@ -14,6 +14,10 @@ export type PageType = (typeof PAGE_TYPES)[number];
 
 export const PAGE_TYPE_SQL_LIST = PAGE_TYPES.map((value) => `'${value}'`).join(", ");
 
+export function isPageType(value: string): value is PageType {
+  return PAGE_TYPES.includes(value as PageType);
+}
+
 export interface PageRecord {
   id: number;
   slug: string;

@@ -1,16 +1,23 @@
 import { BrainDatabase } from "../core/db";
-import { chunkPageContent } from "../core/markdown";
+import { chunkPageContent, type ChunkStrategy, isChunkStrategy } from "../core/markdown";
 import type { EmbeddingProvider } from "../core/embeddings";
 
 export async function runEmbed(
   dbPath: string,
   slug: string | undefined,
   provider: EmbeddingProvider,
+  chunkStrategy?: string,
 ): Promise<string> {
   const brain = new BrainDatabase(dbPath);
 
   try {
     brain.initialize();
+    const configuredStrategy = chunkStrategy ?? brain.getConfig("chunk_strategy") ?? "section";
+
+    if (!isChunkStrategy(configuredStrategy)) {
+      throw new Error(`Unsupported chunk strategy: ${configuredStrategy}`);
+    }
+
     const pages = slug ? [brain.getPageBySlug(slug)].filter((page) => page !== null) : brain.listPages({ limit: 100000 });
 
     if (slug && pages.length === 0) {
@@ -18,7 +25,7 @@ export async function runEmbed(
     }
 
     for (const page of pages) {
-      const chunks = chunkPageContent(page.compiledTruth, page.timeline);
+      const chunks = chunkPageContent(page.compiledTruth, page.timeline, configuredStrategy as ChunkStrategy);
       const preparedChunks: Array<{ chunkText: string; values: number[] }> = [];
 
       for (const chunk of chunks) {

@@ -3,6 +3,8 @@ import { dirname, join } from "node:path";
 import { BrainDatabase } from "../core/db";
 import { slugToMarkdownPath } from "../core/links";
 import { renderStoredMarkdownDocument } from "../core/markdown";
+// @ts-expect-error Bun bundles .sql text imports for the compiled binary.
+import schemaSql from "../schema.sql" with { type: "text" };
 
 function rawSidecarPathForSlug(exportDir: string, slug: string): string {
   const segments = slug.split("/");
@@ -43,14 +45,52 @@ function listManagedExportFiles(rootDir: string): string[] {
   return output;
 }
 
+function renderIndexMarkdown(pages: Array<{ slug: string; type: string; title: string }>): string {
+  const sections = new Map<string, Array<{ slug: string; title: string }>>();
+
+  for (const page of pages) {
+    const pagesForType = sections.get(page.type) ?? [];
+    pagesForType.push({ slug: page.slug, title: page.title });
+    sections.set(page.type, pagesForType);
+  }
+
+  const lines = ["# Index", ""];
+
+  for (const type of [...sections.keys()].sort()) {
+    lines.push(`## ${type}`);
+    lines.push("");
+
+    for (const page of sections.get(type) ?? []) {
+      lines.push(`- ${page.slug} | ${page.title}`);
+    }
+
+    lines.push("");
+  }
+
+  return `${lines.join("\n").trimEnd()}\n`;
+}
+
+function renderLogMarkdown(
+  entries: Array<{ timestamp: string; sourceType: string; sourceRef: string; summary: string }>,
+): string {
+  const lines = ["# Log", ""];
+
+  for (const entry of entries) {
+    lines.push(`- ${entry.timestamp} | ${entry.sourceType} | ${entry.sourceRef} | ${entry.summary}`);
+  }
+
+  return `${lines.join("\n").trimEnd()}\n`;
+}
+
 export async function runExport(dbPath: string, exportDir: string): Promise<string> {
   const brain = new BrainDatabase(dbPath);
 
   try {
     brain.initialize();
     const expectedFiles = new Set<string>();
+    const pages = brain.listPages({ limit: 100000 });
 
-    for (const page of brain.listPages({ limit: 100000 })) {
+    for (const page of pages) {
       const outputPath = join(exportDir, slugToMarkdownPath(page.slug));
       expectedFiles.add(outputPath);
       mkdirSync(dirname(outputPath), { recursive: true });
@@ -79,6 +119,27 @@ export async function runExport(dbPath: string, exportDir: string): Promise<stri
       mkdirSync(dirname(outputPath), { recursive: true });
       writeFileSync(outputPath, JSON.stringify({ sources }, null, 2));
     }
+
+    const schemaPath = join(exportDir, "schema.md");
+    const indexPath = join(exportDir, "index.md");
+    const logPath = join(exportDir, "log.md");
+    expectedFiles.add(schemaPath);
+    expectedFiles.add(indexPath);
+    expectedFiles.add(logPath);
+    mkdirSync(exportDir, { recursive: true });
+    writeFileSync(schemaPath, brain.getConfig("original_schema") ?? `${schemaSql.trim()}\n`);
+    writeFileSync(indexPath, renderIndexMarkdown(pages));
+    writeFileSync(
+      logPath,
+      renderLogMarkdown(
+        brain.listIngestLog().map((entry) => ({
+          timestamp: entry.timestamp,
+          sourceType: entry.sourceType,
+          sourceRef: entry.sourceRef,
+          summary: entry.summary,
+        })),
+      ),
+    );
 
     try {
       for (const filePath of listManagedExportFiles(exportDir)) {

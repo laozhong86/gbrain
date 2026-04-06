@@ -252,4 +252,48 @@ type: person
     expect(existsSync(join(exportDir, "people", ".raw", "pedro-franceschi.json"))).toBe(true);
     expect(existsSync(staleRawPath)).toBe(false);
   });
+
+  it("imports and exports special schema, index, and log files", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "gbrain-special-files-"));
+    dirs.push(dir);
+
+    const sourceDir = join(dir, "brain");
+    mkdirSync(join(sourceDir, "people"), { recursive: true });
+
+    writeFileSync(
+      join(sourceDir, "people", "pedro-franceschi.md"),
+      `---
+title: Pedro Franceschi
+type: person
+---
+
+# Pedro Franceschi
+`,
+    );
+    writeFileSync(join(sourceDir, "schema.md"), "# Schema\n\noriginal schema\n");
+    writeFileSync(join(sourceDir, "index.md"), "# Index\n\nlegacy index\n");
+    writeFileSync(join(sourceDir, "log.md"), "# Log\n\n- imported line\n");
+
+    const dbPath = join(dir, "brain.db");
+    const exportDir = join(dir, "export");
+
+    await expect(runImport(dbPath, sourceDir, false)).resolves.toBe("Imported 1 pages");
+
+    const brain = new BrainDatabase(dbPath);
+
+    try {
+      brain.initialize();
+      expect(brain.getConfig("original_schema")).toBe("# Schema\n\noriginal schema\n");
+      expect(brain.getConfig("original_index")).toBe("# Index\n\nlegacy index\n");
+      expect(brain.listIngestLog().map((entry) => entry.summary)).toContain("imported line");
+    } finally {
+      brain.close();
+    }
+
+    await expect(runExport(dbPath, exportDir)).resolves.toBe(`Exported to ${exportDir}`);
+
+    expect(readFileSync(join(exportDir, "schema.md"), "utf8")).toBe("# Schema\n\noriginal schema\n");
+    expect(readFileSync(join(exportDir, "index.md"), "utf8")).toContain("people/pedro-franceschi | Pedro Franceschi");
+    expect(readFileSync(join(exportDir, "log.md"), "utf8")).toContain("imported line");
+  });
 });

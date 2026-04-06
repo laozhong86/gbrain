@@ -7,6 +7,8 @@ export interface ParsedMarkdownDocument {
   timeline: string;
 }
 
+export type ChunkStrategy = "page" | "section" | "paragraph";
+
 const TIMELINE_SPLIT_PATTERN = /\n---\n(?=\n*- \*\*\d{4}-\d{2}-\d{2}\*\*\s*\|)/;
 
 export function parseMarkdownDocument(source: string): ParsedMarkdownDocument {
@@ -62,14 +64,27 @@ export function renderStoredMarkdownDocument(
   });
 }
 
-export function chunkPageContent(compiledTruth: string, timeline: string): string[] {
+export function isChunkStrategy(value: string): value is ChunkStrategy {
+  return value === "page" || value === "section" || value === "paragraph";
+}
+
+export function chunkPageContent(
+  compiledTruth: string,
+  timeline: string,
+  strategy: ChunkStrategy = "section",
+): string[] {
   const source = timeline
     ? `${compiledTruth.trim()}\n\n## Timeline\n\n${timeline.trim()}`
     : compiledTruth.trim();
-  const sections = source
-    .split(/\n(?=#{1,2}\s)/g)
+
+  if (strategy === "page") {
+    return source.length > 0 ? [source] : [];
+  }
+
+  const chunks = source
+    .split(strategy === "paragraph" ? /\n\s*\n+/g : /\n(?=#{1,2}\s)/g)
     .map((section) => section.trim())
     .filter(Boolean);
 
-  return sections.length > 0 ? sections : [source];
+  return chunks.length > 0 ? chunks : (source.length > 0 ? [source] : []);
 }
