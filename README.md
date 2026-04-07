@@ -248,6 +248,15 @@ Use the dedicated guide for the full install path:
 
 - [`docs/openclaw.md`](/Users/x/Desktop/Project/GBrain/docs/openclaw.md)
 
+The quickest productized install path is now:
+
+```bash
+openclaw plugins install /absolute/path/to/GBrain/plugins/openclaw
+openclaw gateway restart
+```
+
+That installs the GBrain skill pack and hook pack from the dedicated OpenClaw plugin package under `plugins/openclaw`. On first load, the plugin also auto-provisions `mcp.servers.gbrain` if it is missing. The local `gbrain` binary still needs to exist.
+
 ## Skills
 
 Shipped workflow guides live under `skills/`:

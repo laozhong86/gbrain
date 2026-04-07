@@ -8,6 +8,22 @@ The shape is simple:
 - OpenClaw stays the execution environment and client surface.
 - The integration happens through a local database, an MCP server, a skill pack, and an optional session hook.
 
+## Fastest install path
+
+OpenClaw can now install GBrain as a native plugin package from the repo root:
+
+```bash
+openclaw plugins install /absolute/path/to/GBrain/plugins/openclaw
+openclaw gateway restart
+```
+
+That plugin package ships:
+
+- the GBrain skill pack from `skills/`
+- the session ingest hook pack from `hooks/`
+
+You still need the `gbrain` binary available on `PATH` or at `~/.local/bin/gbrain`, because the hook and MCP flow call the local CLI.
+
 ## 1. Install GBrain
 
 ```bash
@@ -43,24 +59,46 @@ gbrain stats
 
 If you prefer explicit paths, `--db` and `GBRAIN_DB` still win.
 
-## 3. Register the MCP server
+## 3. Let the plugin provision the MCP server
 
-Add this to `~/.openclaw/openclaw.json`:
+When you install the native plugin package and restart OpenClaw, it now auto-provisions:
 
 ```json
 {
   "mcp": {
     "servers": {
       "gbrain": {
-        "command": "gbrain",
-        "args": ["serve"]
+        "command": "/Users/you/.local/bin/gbrain",
+        "args": ["serve", "--db", "/Users/you/.openclaw/brain.db"]
       }
     }
   }
 }
 ```
 
-If you are not using `GBRAIN_PROFILE=openclaw`, pass the database path explicitly.
+The defaults are:
+
+- binary: `~/.local/bin/gbrain` if it exists, otherwise `gbrain` from `PATH`
+- database: `~/.openclaw/brain.db`
+
+If you need overrides, set them under `plugins.entries.gbrain.config`:
+
+```json
+{
+  "plugins": {
+    "entries": {
+      "gbrain": {
+        "config": {
+          "binaryPath": "/absolute/path/to/gbrain",
+          "dbPath": "/absolute/path/to/brain.db"
+        }
+      }
+    }
+  }
+}
+```
+
+If `mcp.servers.gbrain` already exists, the plugin leaves it alone.
 
 ## 4. Install the skill pack
 
