@@ -3,7 +3,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BrainDatabase } from "../src/core/db";
-import { callTool, getToolDefinitions } from "../src/mcp/server";
+import { buildServer, callTool, getToolDefinitions } from "../src/mcp/server";
+import pkg from "../package.json";
 
 const cleanup: string[] = [];
 
@@ -21,6 +22,19 @@ describe("getToolDefinitions", () => {
     expect(names).toContain("brain_ingest");
     expect(names).toContain("brain_link");
     expect(names).toContain("brain_query");
+  });
+
+  it("keeps the MCP server version aligned with package.json", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "gbrain-mcp-"));
+    cleanup.push(dir);
+
+    const server = await buildServer(join(dir, "brain.db"));
+
+    expect(
+      ((server.server as unknown) as { _serverInfo?: { version?: string } })._serverInfo?.version,
+    ).toBe(pkg.version);
+
+    await server.close();
   });
 
   it("preserves other raw sources when updating a single source", async () => {

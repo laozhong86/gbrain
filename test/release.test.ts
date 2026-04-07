@@ -36,6 +36,6 @@ describe("release surface", () => {
     });
 
     expect(smokeResult.exitCode).toBe(0);
-    expect(new TextDecoder().decode(smokeResult.stdout).trim()).toBe("0.1.0");
+    expect(new TextDecoder().decode(smokeResult.stdout).trim()).toBe("0.1.1");
   });
 });

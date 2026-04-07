@@ -10,6 +10,7 @@ import { runSearch } from "../commands/search";
 import { runStats } from "../commands/stats";
 import { runTag, runTags, runUntag } from "../commands/tags";
 import { runTimelineAdd, runTimelineList } from "../commands/timeline";
+import { runVersion } from "../commands/version";
 import { BrainDatabase } from "../core/db";
 import { createOpenAIEmbeddingProvider } from "../core/embeddings";
 import { renderMarkdownDocument, parseStoredFrontmatter } from "../core/markdown";
@@ -275,7 +276,7 @@ export async function callTool(
 }
 
 export async function buildServer(dbPath: string): Promise<McpServer> {
-  const server = new McpServer({ name: "gbrain", version: "0.1.0" });
+  const server = new McpServer({ name: "gbrain", version: runVersion() });
 
   server.registerTool("brain_get", {
     description: "Read a page by slug",
