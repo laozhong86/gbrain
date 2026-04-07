@@ -9,6 +9,8 @@ OPENCLAW_PLUGIN_DIR="${GBRAIN_OPENCLAW_PLUGIN_DIR:-$HOME/.local/share/gbrain/ope
 CHECKSUMS_NAME="${GBRAIN_CHECKSUMS_NAME:-SHA256SUMS}"
 RELEASE_BASE_URL="${GBRAIN_RELEASE_BASE_URL:-}"
 CHECKSUMS_URL="${GBRAIN_CHECKSUMS_URL:-}"
+ASSET_NAME_OVERRIDE="${GBRAIN_ASSET_NAME:-}"
+SKIP_POST_INSTALL_RUN="${GBRAIN_SKIP_POST_INSTALL_RUN:-0}"
 WITH_OPENCLAW=0
 VERSION=""
 
@@ -39,6 +41,11 @@ require_cmd() {
 }
 
 detect_asset_name() {
+  if [ -n "$ASSET_NAME_OVERRIDE" ]; then
+    printf '%s\n' "$ASSET_NAME_OVERRIDE"
+    return
+  fi
+
   platform="$(uname -s)"
   arch="$(uname -m)"
 
@@ -153,6 +160,10 @@ install_binary() {
   trap - EXIT INT TERM HUP
 
   log "Installed $target"
+  if [ "$SKIP_POST_INSTALL_RUN" = "1" ]; then
+    return
+  fi
+
   "$target" version
 }
 

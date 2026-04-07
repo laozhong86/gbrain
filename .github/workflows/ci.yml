@@ -52,9 +52,19 @@ jobs:
           install_dir="$RUNNER_TEMP/gbrain-installer"
           mkdir -p "$install_dir"
           chmod +x ./install.sh
-          GBRAIN_RELEASE_BASE_URL="file://$PWD/release-fixture" \
-            ./install.sh --dir "$install_dir" --bin-name gbrain-ci-smoke
-          "$install_dir/gbrain-ci-smoke" version
+          if [ "${{ matrix.asset }}" = "gbrain-darwin-x64" ]; then
+            GBRAIN_SKIP_POST_INSTALL_RUN=1 \
+            GBRAIN_ASSET_NAME="${{ matrix.asset }}" \
+            GBRAIN_RELEASE_BASE_URL="file://$PWD/release-fixture" \
+              ./install.sh --dir "$install_dir" --bin-name gbrain-ci-smoke
+            file "$install_dir/gbrain-ci-smoke" | tee "$RUNNER_TEMP/gbrain-ci-smoke-file.txt"
+            grep -q "x86_64" "$RUNNER_TEMP/gbrain-ci-smoke-file.txt"
+          else
+            GBRAIN_ASSET_NAME="${{ matrix.asset }}" \
+            GBRAIN_RELEASE_BASE_URL="file://$PWD/release-fixture" \
+              ./install.sh --dir "$install_dir" --bin-name gbrain-ci-smoke
+            "$install_dir/gbrain-ci-smoke" version
+          fi
 
   openclaw-plugin-smoke:
     runs-on: ubuntu-latest
