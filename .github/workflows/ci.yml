@@ -72,6 +72,9 @@ jobs:
       HOME: ${{ github.workspace }}/.ci-openclaw-home
     steps:
       - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
       - run: npm install -g openclaw@2026.4.2
       - run: mkdir -p "$HOME"
       - run: >
