@@ -10,6 +10,7 @@ CHECKSUMS_NAME="${GBRAIN_CHECKSUMS_NAME:-SHA256SUMS}"
 RELEASE_BASE_URL="${GBRAIN_RELEASE_BASE_URL:-}"
 CHECKSUMS_URL="${GBRAIN_CHECKSUMS_URL:-}"
 ASSET_NAME_OVERRIDE="${GBRAIN_ASSET_NAME:-}"
+OPENCLAW_PLUGIN_SPEC="${GBRAIN_OPENCLAW_PLUGIN_SPEC:-@laozhong86/gbrain-openclaw}"
 SKIP_POST_INSTALL_RUN="${GBRAIN_SKIP_POST_INSTALL_RUN:-0}"
 WITH_OPENCLAW=0
 VERSION=""
@@ -168,10 +169,26 @@ install_binary() {
 }
 
 install_openclaw_plugin() {
-  require_cmd git
   require_cmd openclaw
 
+  plugin_spec="$OPENCLAW_PLUGIN_SPEC"
+
+  if [ -n "$VERSION" ]; then
+    normalized_version="${VERSION#v}"
+    plugin_spec="${OPENCLAW_PLUGIN_SPEC}@${normalized_version}"
+  fi
+
+  log "Installing OpenClaw plugin from $plugin_spec"
+  if openclaw plugins install "$plugin_spec"; then
+    log "Restarting OpenClaw gateway"
+    openclaw gateway restart
+    return
+  fi
+
+  require_cmd git
   repo_ref="https://github.com/$REPO_SLUG.git"
+
+  log "Published plugin install failed, falling back to repo checkout"
 
   mkdir -p "$(dirname "$OPENCLAW_PLUGIN_DIR")"
   if [ -d "$OPENCLAW_PLUGIN_DIR/.git" ]; then

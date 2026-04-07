@@ -47,7 +47,7 @@ curl -fsSL https://raw.githubusercontent.com/laozhong86/gbrain/main/install.sh |
 curl -fsSL https://raw.githubusercontent.com/laozhong86/gbrain/main/install.sh | sh -s -- --with-openclaw
 ```
 
-这条路径还会把插件 checkout 放到 `~/.local/share/gbrain/openclaw-plugin`，然后执行 `openclaw plugins install --link ...`。
+安装器会先尝试直接安装版本化插件包 `@laozhong86/gbrain-openclaw`。如果当前版本还没有发布这个包，它才会回退到 repo checkout + `openclaw plugins install --link ...`。
 
 ### 从源码安装
 

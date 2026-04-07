@@ -262,14 +262,21 @@ Use the dedicated guide for the full install path:
 
 - [`docs/openclaw.md`](/Users/x/Desktop/Project/GBrain/docs/openclaw.md)
 
-The quickest productized install path is now:
+Once the package is published, the versioned plugin install path is:
+
+```bash
+openclaw plugins install @laozhong86/gbrain-openclaw
+openclaw gateway restart
+```
+
+That installs the published GBrain OpenClaw plugin package without requiring a source checkout. The package metadata and release workflow are prepared for this path; the actual registry publish still depends on maintainer npm credentials. On first load, the plugin auto-provisions `mcp.servers.gbrain` if it is missing. The local `gbrain` binary still needs to exist.
+
+For local development or pre-publish testing, the repo path still works:
 
 ```bash
 openclaw plugins install /absolute/path/to/GBrain/plugins/openclaw
 openclaw gateway restart
 ```
-
-That installs the GBrain skill pack and hook pack from the dedicated OpenClaw plugin package under `plugins/openclaw`. On first load, the plugin also auto-provisions `mcp.servers.gbrain` if it is missing. The local `gbrain` binary still needs to exist.
 
 ## Skills
 

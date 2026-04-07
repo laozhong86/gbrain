@@ -1,15 +1,50 @@
 {
   "name": "@laozhong86/gbrain-openclaw",
   "version": "0.1.2",
-  "private": true,
   "description": "OpenClaw plugin package for GBrain skills and session-ingest hooks.",
   "type": "module",
+  "main": "./index.js",
+  "files": [
+    "README.md",
+    "index.js",
+    "mcp-bootstrap.d.ts",
+    "mcp-bootstrap.js",
+    "openclaw.plugin.json",
+    "schema.sql",
+    "skills",
+    "hooks"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/laozhong86/gbrain.git",
+    "directory": "plugins/openclaw"
+  },
+  "keywords": [
+    "openclaw",
+    "plugin",
+    "gbrain",
+    "mcp",
+    "knowledge-graph"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "openclaw": {
     "extensions": [
       "./index.js"
     ],
+    "compat": {
+      "pluginApi": ">=2026.4.2",
+      "minGatewayVersion": "2026.4.2"
+    },
+    "build": {
+      "openclawVersion": "2026.4.2",
+      "pluginSdkVersion": "2026.4.2"
+    },
     "install": {
-      "defaultChoice": "path",
+      "defaultChoice": "npm",
+      "npmSpec": "@laozhong86/gbrain-openclaw",
       "minHostVersion": ">=2026.4.2"
     }
   }

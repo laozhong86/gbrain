@@ -10,19 +10,26 @@ The shape is simple:
 
 ## Fastest install path
 
-OpenClaw can now install GBrain as a native plugin package from the repo root:
+Once the package is published, OpenClaw can install GBrain as a versioned plugin package without a source checkout:
 
 ```bash
-openclaw plugins install /absolute/path/to/GBrain/plugins/openclaw
+openclaw plugins install @laozhong86/gbrain-openclaw
 openclaw gateway restart
 ```
 
-That plugin package ships:
+That package ships:
 
 - the GBrain skill pack from `skills/`
 - the session ingest hook pack from `hooks/`
 
 You still need the `gbrain` binary available on `PATH` or at `~/.local/bin/gbrain`, because the hook and MCP flow call the local CLI.
+
+Until the registry publish happens, or for local development, the repo path still works:
+
+```bash
+openclaw plugins install /absolute/path/to/GBrain/plugins/openclaw
+openclaw gateway restart
+```
 
 ## 1. Install GBrain
 
@@ -100,50 +107,14 @@ If you need overrides, set them under `plugins.entries.gbrain.config`:
 
 If `mcp.servers.gbrain` already exists, the plugin leaves it alone.
 
-## 4. Install the skill pack
+## 4. What the plugin provides
 
-```bash
-mkdir -p ~/.openclaw/workspace/skills
-cp -R skills/ingest ~/.openclaw/workspace/skills/gbrain-ingest
-cp -R skills/query ~/.openclaw/workspace/skills/gbrain-query
-cp -R skills/maintain ~/.openclaw/workspace/skills/gbrain-maintain
-cp -R skills/enrich ~/.openclaw/workspace/skills/gbrain-enrich
-cp -R skills/briefing ~/.openclaw/workspace/skills/gbrain-briefing
-```
+The published plugin package already bundles:
 
-These skills add the operator workflow layer on top of the CLI and MCP tools.
+- the GBrain skill pack
+- the session auto-ingest hook
 
-## 5. Optional: enable session auto-ingest
-
-```bash
-mkdir -p ~/.openclaw/workspace/skills
-cp -R hooks/gbrain-ingest-session ~/.openclaw/workspace/skills/gbrain-ingest-session
-```
-
-Then register it in `~/.openclaw/openclaw.json`:
-
-```json
-{
-  "hooks": {
-    "internal": {
-      "handlers": [
-        {
-          "event": "command:new",
-          "module": "~/.openclaw/workspace/skills/gbrain-ingest-session/hook.js",
-          "export": "default"
-        },
-        {
-          "event": "command:reset",
-          "module": "~/.openclaw/workspace/skills/gbrain-ingest-session/hook.js",
-          "export": "default"
-        }
-      ]
-    }
-  }
-}
-```
-
-That hook stores the conversation as a `conversation` source via:
+The hook stores the conversation as a `conversation` source via:
 
 ```bash
 gbrain ingest /tmp/... --type conversation --ref openclaw-session/<session-id>

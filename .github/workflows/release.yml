@@ -60,3 +60,46 @@ jobs:
           name: ${{ github.ref_name }}
           tag_name: ${{ github.ref_name }}
           files: dist/*
+
+  publish-openclaw-package:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+      - id: npm-auth
+        run: |
+          if [ -n "${NPM_TOKEN:-}" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - if: ${{ steps.npm-auth.outputs.available != 'true' }}
+        run: echo "NPM_TOKEN is not configured, skipping plugin publish."
+      - if: ${{ steps.npm-auth.outputs.available == 'true' }}
+        run: |
+          root_version="$(node -p "require('./package.json').version")"
+          plugin_version="$(node -p "require('./plugins/openclaw/package.json').version")"
+          tag_version="${GITHUB_REF_NAME#v}"
+
+          test "$root_version" = "$tag_version"
+          test "$plugin_version" = "$tag_version"
+      - if: ${{ steps.npm-auth.outputs.available == 'true' }}
+        run: |
+          plugin_version="$(node -p "require('./package.json').version")"
+          if npm view "@laozhong86/gbrain-openclaw@${plugin_version}" version >/dev/null 2>&1; then
+            echo "Package version ${plugin_version} is already published, skipping."
+            exit 0
+          fi
+          npm publish
+        working-directory: plugins/openclaw
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
