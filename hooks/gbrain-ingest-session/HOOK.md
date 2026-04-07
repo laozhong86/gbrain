@@ -25,10 +25,13 @@ This hook captures the current OpenClaw session transcript and writes it into GB
 4. Runs:
 
 ```bash
-gbrain ingest /tmp/... --type conversation --ref openclaw-session/<session-id>
+gbrain ingest /tmp/... --type conversation --ref openclaw-session/<session-id> --db ~/.openclaw/brain.db
 ```
 
-The ingest stays lightweight on purpose. The durable extraction step still belongs to `skills/ingest/SKILL.md`.
+5. Generates a deterministic extracted memory page under `concepts/openclaw-session-memory-<session-id>`.
+6. Links that extracted page back to the original transcript source page.
+
+The extraction is heuristic on purpose. It closes the storage loop today, but richer entity-level extraction still belongs to future work.
 
 ## Install
 
@@ -48,12 +51,12 @@ Then register it in `~/.openclaw/openclaw.json`:
       "handlers": [
         {
           "event": "command:new",
-          "module": "~/.openclaw/workspace/skills/gbrain-ingest-session/hook.js",
+          "module": "gbrain-ingest-session/handler.js",
           "export": "default"
         },
         {
           "event": "command:reset",
-          "module": "~/.openclaw/workspace/skills/gbrain-ingest-session/hook.js",
+          "module": "gbrain-ingest-session/handler.js",
           "export": "default"
         }
       ]
