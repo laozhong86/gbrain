@@ -89,6 +89,18 @@ Prerequisites:
 - macOS or Linux
 - optional: `OPENAI_API_KEY` or `OPENROUTER_API_KEY` for embeddings and hybrid query
 
+One-command install for the latest release binary:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/laozhong86/gbrain/main/install.sh | sh
+```
+
+If you also want the OpenClaw plugin checkout installed and wired up:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/laozhong86/gbrain/main/install.sh | sh -s -- --with-openclaw
+```
+
 From source:
 
 ```bash

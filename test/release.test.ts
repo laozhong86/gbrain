@@ -6,6 +6,7 @@ describe("release surface", () => {
     expect(existsSync("LICENSE")).toBe(true);
     expect(existsSync("README.md")).toBe(true);
     expect(existsSync("CLAUDE.md")).toBe(true);
+    expect(existsSync("install.sh")).toBe(true);
     expect(existsSync("docs/openclaw.md")).toBe(true);
     expect(existsSync("plugins/openclaw/openclaw.plugin.json")).toBe(true);
     expect(existsSync("plugins/openclaw/index.js")).toBe(true);
