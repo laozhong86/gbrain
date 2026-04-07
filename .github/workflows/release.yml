@@ -13,10 +13,13 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
+            target: bun-linux-x64
             asset: gbrain-linux-x64
-          - os: macos-13
+          - os: macos-latest
+            target: bun-darwin-x64
             asset: gbrain-darwin-x64
           - os: macos-latest
+            target: bun-darwin-arm64
             asset: gbrain-darwin-arm64
     runs-on: ${{ matrix.os }}
     steps:
@@ -27,7 +30,7 @@ jobs:
       - run: bun install
       - run: bun run check
       - run: bun test
-      - run: bun build --compile --outfile ${{ matrix.asset }} src/cli.ts
+      - run: bun build --compile --target=${{ matrix.target }} --outfile ${{ matrix.asset }} src/cli.ts
       - uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.asset }}
