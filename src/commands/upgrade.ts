@@ -1,7 +1,10 @@
 import { chmodSync, existsSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
+import { createHash } from "node:crypto";
 import { runVersion } from "./version";
+
+const CHECKSUMS_ASSET_NAME = "SHA256SUMS";
 
 interface ReleaseAsset {
   browser_download_url: string;
@@ -17,6 +20,7 @@ export interface UpgradeOptions {
   apiUrl?: string;
   assetName?: string;
   checkOnly?: boolean;
+  checksumsAssetName?: string;
   currentVersion?: string;
   executablePath?: string;
   fetchImpl?: typeof fetch;
@@ -81,8 +85,7 @@ async function fetchRelease(
 async function downloadAsset(
   asset: ReleaseAsset,
   fetchImpl: typeof fetch,
-  targetPath: string,
-): Promise<void> {
+): Promise<Buffer> {
   const response = await fetchImpl(asset.browser_download_url, {
     headers: {
       "user-agent": "gbrain-self-update",
@@ -93,14 +96,41 @@ async function downloadAsset(
     throw new Error(`Asset download failed with ${response.status}`);
   }
 
-  const body = await response.arrayBuffer();
-  writeFileSync(targetPath, Buffer.from(body));
-  chmodSync(targetPath, 0o755);
+  return Buffer.from(await response.arrayBuffer());
+}
+
+function readExpectedChecksum(checksumContent: string, assetName: string): string {
+  const line = checksumContent
+    .split(/\r?\n/)
+    .find((entry) => entry.trim().length > 0 && entry.trim().endsWith(assetName));
+
+  if (!line) {
+    throw new Error(`No checksum entry was found for ${assetName}`);
+  }
+
+  const [checksum] = line.trim().split(/\s+/);
+
+  if (!checksum) {
+    throw new Error(`Invalid checksum entry for ${assetName}`);
+  }
+
+  return checksum.toLowerCase();
+}
+
+function verifyChecksum(buffer: Buffer, expectedChecksum: string, assetName: string): void {
+  const actualChecksum = createHash("sha256").update(buffer).digest("hex");
+
+  if (actualChecksum !== expectedChecksum) {
+    throw new Error(
+      `Checksum verification failed for ${assetName}: expected ${expectedChecksum}, got ${actualChecksum}`,
+    );
+  }
 }
 
 export async function runUpgrade(options: UpgradeOptions = {}): Promise<string> {
   const apiUrl = options.apiUrl ?? "https://api.github.com/repos/laozhong86/gbrain/releases/latest";
   const assetName = options.assetName ?? getDefaultAssetName();
+  const checksumsAssetName = options.checksumsAssetName ?? CHECKSUMS_ASSET_NAME;
   const currentVersion = normalizeVersion(options.currentVersion ?? runVersion());
   const executablePath = options.executablePath ?? process.execPath;
   const fetchImpl = options.fetchImpl ?? fetch;
@@ -119,6 +149,7 @@ export async function runUpgrade(options: UpgradeOptions = {}): Promise<string> 
   assertUpgradeableExecutable(executablePath);
 
   const asset = release.assets.find((entry) => entry.name === assetName);
+  const checksumsAsset = release.assets.find((entry) => entry.name === checksumsAssetName);
 
   if (!asset) {
     throw new Error(
@@ -126,11 +157,24 @@ export async function runUpgrade(options: UpgradeOptions = {}): Promise<string> 
     );
   }
 
+  if (!checksumsAsset) {
+    throw new Error(
+      `No release asset named ${checksumsAssetName} was found in release ${release.tag_name}`,
+    );
+  }
+
   const tempDir = mkdtempSync(join(tmpdir(), "gbrain-upgrade-"));
   const tempPath = join(tempDir, asset.name);
 
   try {
-    await downloadAsset(asset, fetchImpl, tempPath);
+    const [binaryBuffer, checksumsBuffer] = await Promise.all([
+      downloadAsset(asset, fetchImpl),
+      downloadAsset(checksumsAsset, fetchImpl),
+    ]);
+    const expectedChecksum = readExpectedChecksum(checksumsBuffer.toString("utf8"), asset.name);
+    verifyChecksum(binaryBuffer, expectedChecksum, asset.name);
+    writeFileSync(tempPath, binaryBuffer);
+    chmodSync(tempPath, 0o755);
     renameSync(tempPath, executablePath);
   } finally {
     rmSync(tempDir, { force: true, recursive: true });

@@ -30,8 +30,16 @@ curl -fsSL https://raw.githubusercontent.com/laozhong86/gbrain/main/install.sh |
 这个安装器会：
 
 - 按当前平台下载最新 GitHub Release 二进制
+- 下载同一 release 的 `SHA256SUMS`
+- 在替换目标二进制前做 SHA-256 校验
 - 安装到 `~/.local/bin/gbrain`
 - 直接把二进制设成可执行
+
+当前 release 资产覆盖：
+
+- `gbrain-linux-x64`
+- `gbrain-darwin-arm64`
+- `gbrain-darwin-x64`
 
 如果目标机器已经装了 OpenClaw，并且你要顺手把插件也接上：
 
@@ -299,7 +307,7 @@ gbrain upgrade --check
 gbrain upgrade
 ```
 
-这条路径会从 GitHub Release 下载与你当前平台匹配的最新二进制并原地替换。
+这条路径会从 GitHub Release 下载与你当前平台匹配的最新二进制，校验 `SHA256SUMS`，然后原地替换。
 
 注意两点：
 

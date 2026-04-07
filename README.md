@@ -95,6 +95,8 @@ One-command install for the latest release binary:
 curl -fsSL https://raw.githubusercontent.com/laozhong86/gbrain/main/install.sh | sh
 ```
 
+The installer verifies the downloaded binary against the published `SHA256SUMS` file before replacing the target executable.
+
 If you also want the OpenClaw plugin checkout installed and wired up:
 
 ```bash
@@ -291,7 +293,13 @@ gbrain upgrade --check
 gbrain upgrade
 ```
 
-`gbrain upgrade` downloads the latest matching binary from GitHub Releases and replaces the local executable in place.
+`gbrain upgrade` downloads the latest matching binary from GitHub Releases, verifies it against the published `SHA256SUMS`, and replaces the local executable in place.
+
+Current release assets cover:
+
+- `gbrain-linux-x64`
+- `gbrain-darwin-arm64`
+- `gbrain-darwin-x64`
 
 If self-update is unavailable on the current platform, the manual path still works:
 

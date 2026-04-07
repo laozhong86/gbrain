@@ -24,7 +24,10 @@ describe("runUpgrade", () => {
       new Response(
         JSON.stringify({
           tag_name: "v0.2.0",
-          assets: [{ name: "gbrain-darwin-arm64", browser_download_url: "https://example.com/asset" }],
+          assets: [
+            { name: "gbrain-darwin-arm64", browser_download_url: "https://example.com/asset" },
+            { name: "SHA256SUMS", browser_download_url: "https://example.com/checksums" },
+          ],
         }),
         { status: 200, headers: { "content-type": "application/json" } },
       )) as unknown as typeof fetch;
@@ -52,9 +55,22 @@ describe("runUpgrade", () => {
         return new Response(
           JSON.stringify({
             tag_name: "v0.2.0",
-            assets: [{ name: "gbrain-darwin-arm64", browser_download_url: "https://example.com/asset" }],
+            assets: [
+              { name: "gbrain-darwin-arm64", browser_download_url: "https://example.com/asset" },
+              { name: "SHA256SUMS", browser_download_url: "https://example.com/checksums" },
+            ],
           }),
           { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+
+      if (String(url).endsWith("/checksums")) {
+        return new Response(
+          "3e2b640c4a45777e3e885018961a7f04d722259075f43de7d0b0511d1547b2d8  gbrain-darwin-arm64\n",
+          {
+            status: 200,
+            headers: { "content-type": "text/plain" },
+          },
         );
       }
 
@@ -82,7 +98,7 @@ describe("runUpgrade", () => {
       new Response(
         JSON.stringify({
           tag_name: "v0.2.0",
-          assets: [],
+          assets: [{ name: "SHA256SUMS", browser_download_url: "https://example.com/checksums" }],
         }),
         { status: 200, headers: { "content-type": "application/json" } },
       )) as unknown as typeof fetch;
@@ -94,5 +110,52 @@ describe("runUpgrade", () => {
         fetchImpl,
       }),
     ).rejects.toThrow("Self-update only works when running the compiled gbrain binary");
+  });
+
+  it("rejects an update when the downloaded asset checksum does not match", async () => {
+    const dir = createTempDir("gbrain-upgrade-");
+    const executablePath = join(dir, "gbrain");
+    writeFileSync(executablePath, "old-binary");
+    chmodSync(executablePath, 0o755);
+
+    const fetchImpl = (async (url: string | URL | Request) => {
+      if (String(url).endsWith("/latest")) {
+        return new Response(
+          JSON.stringify({
+            tag_name: "v0.2.0",
+            assets: [
+              { name: "gbrain-darwin-arm64", browser_download_url: "https://example.com/asset" },
+              { name: "SHA256SUMS", browser_download_url: "https://example.com/checksums" },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+
+      if (String(url).endsWith("/checksums")) {
+        return new Response(
+          "0000000000000000000000000000000000000000000000000000000000000000  gbrain-darwin-arm64\n",
+          {
+            status: 200,
+            headers: { "content-type": "text/plain" },
+          },
+        );
+      }
+
+      return new Response("new-binary", {
+        status: 200,
+        headers: { "content-type": "application/octet-stream" },
+      });
+    }) as typeof fetch;
+
+    await expect(
+      runUpgrade({
+        apiUrl: "https://example.com/latest",
+        assetName: "gbrain-darwin-arm64",
+        currentVersion: "0.1.0",
+        executablePath,
+        fetchImpl,
+      }),
+    ).rejects.toThrow("Checksum verification failed for gbrain-darwin-arm64");
   });
 });
