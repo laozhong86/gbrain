@@ -6,11 +6,14 @@ describe("release surface", () => {
     expect(existsSync("LICENSE")).toBe(true);
     expect(existsSync("README.md")).toBe(true);
     expect(existsSync("CLAUDE.md")).toBe(true);
+    expect(existsSync("docs/openclaw.md")).toBe(true);
     expect(existsSync("skills/ingest/SKILL.md")).toBe(true);
     expect(existsSync("skills/query/SKILL.md")).toBe(true);
     expect(existsSync("skills/maintain/SKILL.md")).toBe(true);
     expect(existsSync("skills/enrich/SKILL.md")).toBe(true);
     expect(existsSync("skills/briefing/SKILL.md")).toBe(true);
+    expect(existsSync("hooks/gbrain-ingest-session/HOOK.md")).toBe(true);
+    expect(existsSync("hooks/gbrain-ingest-session/hook.js")).toBe(true);
     expect(existsSync(".github/workflows/release.yml")).toBe(true);
 
     const buildResult = Bun.spawnSync(["bun", "run", "build"], {

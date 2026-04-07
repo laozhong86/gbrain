@@ -1,6 +1,11 @@
 ---
 name: gbrain-cli
 description: Use when installing, deploying locally, upgrading, configuring embeddings, or wiring the GBrain CLI into MCP clients such as Claude Code, Codex, or OpenClaw.
+metadata:
+  openclaw:
+    emoji: "🛠️"
+    requires:
+      bins: [gbrain]
 ---
 
 # GBrain CLI
@@ -69,6 +74,16 @@ mkdir -p ~/.gbrain
 gbrain init ~/.gbrain/main.db
 gbrain stats --db ~/.gbrain/main.db
 ```
+
+OpenClaw-specific preset:
+
+```bash
+export GBRAIN_PROFILE=openclaw
+gbrain init
+gbrain stats
+```
+
+That preset resolves the default database path to `~/.openclaw/brain.db` while keeping the generic CLI behavior unchanged for everyone else.
 
 Minimum smoke checks:
 
@@ -162,7 +177,35 @@ Codex uses the same stdio MCP shape. Prefer an absolute binary path and a stable
 
 ### OpenClaw
 
-OpenClaw also works best by treating GBrain as a stdio MCP server. The server shape is the same, only the host config surface changes.
+OpenClaw works best by treating GBrain as a stdio MCP server plus a local skill pack.
+
+Minimal MCP config:
+
+```json
+{
+  "mcp": {
+    "servers": {
+      "gbrain": {
+        "command": "gbrain",
+        "args": ["serve", "--db", "/Users/x/.openclaw/brain.db"]
+      }
+    }
+  }
+}
+```
+
+If you want OpenClaw-native defaults, set:
+
+```bash
+export GBRAIN_PROFILE=openclaw
+```
+
+Then `gbrain init`, `gbrain stats`, and `gbrain serve` all resolve to `~/.openclaw/brain.db` unless `--db` or `GBRAIN_DB` overrides it.
+
+OpenClaw also supports the shipped skill pack and session ingest hook. See:
+
+- [`docs/openclaw.md`](/Users/x/Desktop/Project/GBrain/docs/openclaw.md)
+- [`hooks/gbrain-ingest-session/HOOK.md`](/Users/x/Desktop/Project/GBrain/hooks/gbrain-ingest-session/HOOK.md)
 
 ## Upgrade
 

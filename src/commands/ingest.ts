@@ -48,10 +48,15 @@ export function runIngestContent(dbPath: string, input: IngestInput): string {
   }
 }
 
-export function runIngest(dbPath: string, filePath: string, sourceType: string): string {
+export function runIngest(
+  dbPath: string,
+  filePath: string,
+  sourceType: string,
+  sourceRef?: string,
+): string {
   return runIngestContent(dbPath, {
     content: readFileSync(filePath, "utf8"),
-    sourceRef: resolve(filePath),
+    sourceRef: sourceRef ?? resolve(filePath),
     sourceType,
   });
 }

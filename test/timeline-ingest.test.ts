@@ -244,4 +244,38 @@ describe("ingest command", () => {
       brain.close();
     }
   });
+
+  it("preserves an explicit source ref when ingesting a file", () => {
+    const dir = mkdtempSync(join(tmpdir(), "gbrain-ingest-ref-"));
+    dirs.push(dir);
+
+    const dbPath = join(dir, "brain.db");
+    const filePath = join(dir, "session.txt");
+    writeFileSync(filePath, "Conversation transcript");
+
+    expect(runIngest(dbPath, filePath, "conversation", "openclaw-session/xyz")).toBe(
+      "Ingested openclaw-session/xyz",
+    );
+
+    const brain = new BrainDatabase(dbPath);
+
+    try {
+      brain.initialize();
+      const ingestLog = brain.db
+        .query<{ source_ref: string; source_type: string }, []>(
+          `SELECT source_ref, source_type
+           FROM ingest_log
+           ORDER BY id DESC
+           LIMIT 1`,
+        )
+        .get();
+
+      expect(ingestLog).toEqual({
+        source_ref: "openclaw-session/xyz",
+        source_type: "conversation",
+      });
+    } finally {
+      brain.close();
+    }
+  });
 });

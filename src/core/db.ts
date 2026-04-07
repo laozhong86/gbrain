@@ -1,4 +1,6 @@
 import { Database } from "bun:sqlite";
+import { mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 import {
   cosineSimilarity,
   decodeEmbedding,
@@ -157,6 +159,7 @@ export class BrainDatabase {
   readonly db: Database;
 
   constructor(readonly dbPath: string) {
+    mkdirSync(dirname(dbPath), { recursive: true });
     this.db = new Database(dbPath, { create: true });
   }
 

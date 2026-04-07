@@ -18,12 +18,13 @@ function createTempDir(): string {
   return dir;
 }
 
-function runCli(args: string[], input?: string) {
+function runCli(args: string[], input?: string, env?: Record<string, string>) {
   return Bun.spawnSync(["bun", "run", "src/cli.ts", ...args], {
     cwd: process.cwd(),
     stdin: input === undefined ? "ignore" : Buffer.from(input),
     stdout: "pipe",
     stderr: "pipe",
+    env: env ? { ...process.env, ...env } : process.env,
   });
 }
 
@@ -161,5 +162,25 @@ tags:
     expect(decode(ingestResult.stdout)).toContain(`Ingested ${ingestPath}`);
     expect(existsSync(join(exportDir, "people", "pedro-franceschi.md"))).toBe(true);
     expect(readFileSync(join(exportDir, "log.md"), "utf8")).toContain("Ingested");
+  });
+
+  it("supports explicit source refs on ingest and the OpenClaw profile db preset", () => {
+    const dir = createTempDir();
+    const homeDir = join(dir, "home");
+    const ingestPath = join(dir, "conversation.txt");
+    const profileDb = join(homeDir, ".openclaw", "brain.db");
+    writeFileSync(ingestPath, "Session notes");
+
+    const ingestResult = runCli(
+      ["ingest", ingestPath, "--type", "conversation", "--ref", "openclaw-session/abc123"],
+      undefined,
+      { HOME: homeDir, GBRAIN_PROFILE: "openclaw" },
+    );
+    const statsResult = runCli(["stats"], undefined, { HOME: homeDir, GBRAIN_PROFILE: "openclaw" });
+
+    expect(ingestResult.exitCode).toBe(0);
+    expect(statsResult.exitCode).toBe(0);
+    expect(existsSync(profileDb)).toBe(true);
+    expect(decode(ingestResult.stdout)).toContain("Ingested openclaw-session/abc123");
   });
 });

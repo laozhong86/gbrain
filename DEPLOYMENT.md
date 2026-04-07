@@ -2,6 +2,11 @@
 
 GBrain 不是一个需要长期运行在云上的 Web 服务。当前更准确的说法是安装和分发：把 `gbrain` 编译成一个本地可执行 CLI，配一个 `brain.db`，再按需接到 MCP client。
 
+如果部署目标是 OpenClaw，先看这两份：
+
+- [`docs/openclaw.md`](/Users/x/Desktop/Project/GBrain/docs/openclaw.md)
+- [`hooks/gbrain-ingest-session/HOOK.md`](/Users/x/Desktop/Project/GBrain/hooks/gbrain-ingest-session/HOOK.md)
+
 这份文档分三种场景：
 
 1. 本地安装，自己直接用
@@ -63,6 +68,16 @@ cp bin/gbrain ~/.local/bin/gbrain
 gbrain init
 gbrain stats
 ```
+
+如果你想用 OpenClaw 友好的默认路径，可以启用这个预设：
+
+```bash
+export GBRAIN_PROFILE=openclaw
+gbrain init
+gbrain stats
+```
+
+这样默认数据库会落到 `~/.openclaw/brain.db`。显式传 `--db` 或设置 `GBRAIN_DB` 仍然优先。
 
 ### Embeddings 相关环境变量
 

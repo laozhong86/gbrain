@@ -76,6 +76,11 @@ Any MCP-capable client can talk to the same brain:
 
 The storage is local. The access is standardized. The memory persists across sessions.
 
+OpenClaw-specific setup now has its own guide:
+
+- [`docs/openclaw.md`](/Users/x/Desktop/Project/GBrain/docs/openclaw.md)
+- [`hooks/gbrain-ingest-session/HOOK.md`](/Users/x/Desktop/Project/GBrain/hooks/gbrain-ingest-session/HOOK.md)
+
 ## Install
 
 Prerequisites:
@@ -119,6 +124,16 @@ gbrain version
 gbrain --tools-json
 gbrain stats --db ~/.gbrain/main.db
 ```
+
+If you are wiring GBrain into OpenClaw, you can opt into the OpenClaw preset:
+
+```bash
+export GBRAIN_PROFILE=openclaw
+gbrain init
+gbrain stats
+```
+
+That makes the default database path `~/.openclaw/brain.db` unless `--db` or `GBRAIN_DB` overrides it.
 
 ## Embeddings
 
@@ -218,6 +233,20 @@ The current tool surface includes:
 - `brain_backlinks`
 - `brain_stats`
 - `brain_raw`
+
+## OpenClaw
+
+OpenClaw is now a first-class integration target for this repo.
+
+The OpenClaw path adds three things on top of the generic MCP setup:
+
+- the `GBRAIN_PROFILE=openclaw` runtime preset
+- the shipped `skills/` pack
+- the optional session ingest hook in `hooks/gbrain-ingest-session`
+
+Use the dedicated guide for the full install path:
+
+- [`docs/openclaw.md`](/Users/x/Desktop/Project/GBrain/docs/openclaw.md)
 
 ## Skills
 

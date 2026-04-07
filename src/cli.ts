@@ -23,12 +23,24 @@ import { isChunkStrategy } from "./core/markdown";
 import { BrainDatabase } from "./core/db";
 import { getToolDefinitions } from "./mcp/server";
 
+function resolveDefaultDbPath(): string {
+  if (process.env.GBRAIN_DB) {
+    return process.env.GBRAIN_DB;
+  }
+
+  if (process.env.GBRAIN_PROFILE === "openclaw") {
+    return `${process.env.HOME ?? "~"}/.openclaw/brain.db`;
+  }
+
+  return "brain.db";
+}
+
 function consumeDbFlag(argv: string[]): { args: string[]; dbPath: string } {
   const args = [...argv];
   const dbIndex = args.indexOf("--db");
 
   if (dbIndex === -1) {
-    return { args, dbPath: process.env.GBRAIN_DB ?? "brain.db" };
+    return { args, dbPath: resolveDefaultDbPath() };
   }
 
   const dbPath = args[dbIndex + 1];
@@ -304,7 +316,13 @@ async function run(argv: string[]): Promise<string | undefined> {
     }
     case "ingest": {
       const ingestArgs = consumeOption(rest.slice(1), "--type");
-      return runIngest(db.dbPath, requireArg(rest[0], "file"), ingestArgs.value ?? "doc");
+      const refArgs = consumeOption(ingestArgs.args, "--ref");
+      return runIngest(
+        db.dbPath,
+        requireArg(rest[0], "file"),
+        ingestArgs.value ?? "doc",
+        refArgs.value,
+      );
     }
     default:
       throw new Error(`Unknown command: ${command ?? ""}`.trim());
